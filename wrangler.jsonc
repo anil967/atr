@@ -8,9 +8,9 @@
   "main": "@tanstack/react-start/server-entry",
   "vars": {
     "SUPABASE_URL": "https://ifwrfvxtpqmqoltmpbeb.supabase.co",
+    "SUPABASE_SERVICE_KEY": "sb_secret_Uqu7ri__5ES1mHXO4RcPOA_nwc264KG"
   },
   "observability": {
     "enabled": true
   }
 }
-//data
