@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bcet-atr",
+  "compatibility_date": "2024-11-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "@tanstack/react-start/server-entry",
+  "vars": {
+    "SUPABASE_URL": "https://ifwrfvxtpqmqoltmpbeb.supabase.co",
+  },
+  "observability": {
+    "enabled": true
+  }
+}
