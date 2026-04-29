@@ -52,24 +52,7 @@ function HodPage() {
           </p>
         </header>
 
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard
-            label="Awaiting HOD"
-            value={reviewItems.length}
-            tone="accent"
-            hint="Needs your decision"
-          />
-          <StatCard
-            label="Sent to Chief Mentor"
-            value={escalated.length}
-            hint="Escalated this cycle"
-          />
-          <StatCard
-            label="Approved"
-            value={approved.length}
-            hint="Finalized reports"
-          />
-        </section>
+
 
         <section className="bg-surface rounded-3xl border border-border/60 shadow-card overflow-hidden">
           <div className="px-6 py-4 border-b border-border/60 bg-secondary/40">
@@ -86,7 +69,7 @@ function HodPage() {
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{r.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {r.id} · {r.department} · {format(new Date(r.date), "MMM d, yyyy")}
+                    {r.id} · {r.department} · {format(new Date(r.createdAt), "MMM d, yyyy")}
                   </p>
                 </div>
                 <StatusBadge status={r.status} />

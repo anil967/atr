@@ -5,7 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import * as bcrypt from "bcrypt-ts";
 import { getSupabase } from "./supabase";
-import type { Role } from "./atr-types";
+import type { Role, AtrStatus, AtrTimelineEntry } from "./atr-types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -110,6 +110,8 @@ export const signupFn = createServerFn({ method: "POST" })
     // Cost=10: secure and fast within Cloudflare's CPU limits
     const passwordHash = await bcrypt.hash(data.password, 10);
 
+    const isHod = data.role === "hod";
+
     const { error } = await sb.from("users").insert({
       name: data.name.trim(),
       email,
@@ -117,7 +119,8 @@ export const signupFn = createServerFn({ method: "POST" })
       role: data.role,
       department: data.department.trim(),
       disabled: false,
-      approval_status: "pending",
+      approval_status: isHod ? "approved" : "pending",
+      approved_at: isHod ? new Date().toISOString() : null,
     });
 
     if (error) handleSupabaseError(error);
@@ -126,6 +129,14 @@ export const signupFn = createServerFn({ method: "POST" })
       ok: true as const,
       message: "Signup request submitted. Please wait for Chief Proctor approval.",
     };
+  });
+
+export const deleteUserFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { userId: string } }) => {
+    const sb = getSupabase();
+    const { error } = await sb.from("users").delete().eq("id", data.userId);
+    if (error) handleSupabaseError(error);
+    return { ok: true };
   });
 
 // ── Admin/Approval Functions ──────────────────────────────────────────────────
@@ -258,12 +269,34 @@ export const saveStudentsFn = createServerFn({ method: "POST" })
 // ── ATR Functions ─────────────────────────────────────────────────────────────
 
 export const getAtrsFn = createServerFn({ method: "POST" })
-  .handler(async () => {
+  .handler(async ({ data }: { data: { user: AuthUser } }) => {
+    const { user } = data;
     const sb = getSupabase();
-    const { data: rows, error } = await sb
-      .from("atrs")
-      .select("*")
-      .order("created_at", { ascending: false });
+    
+    let query = sb.from("atrs").select("*");
+
+    if (user.role === "mentor") {
+      // Mentors only see their own ATRs
+      query = query.filter("payload->>mentorId", "eq", user.id);
+    } else if (user.role === "coordinator") {
+      // Coordinators only see assigned mentors' ATRs
+      const { data: mappings } = await sb
+        .from("mentor_mappings")
+        .select("mentor_id")
+        .eq("coordinator_id", user.id);
+      
+      const assignedMentorIds = (mappings ?? []).map(m => m.mentor_id);
+      if (assignedMentorIds.length === 0) return [];
+      
+      query = query.filter("payload->>mentorId", "in", `(${assignedMentorIds.join(',')})`);
+    } else if (user.role === "hod") {
+      // HODs see all ATRs from their department
+      query = query.filter("payload->>department", "eq", user.department);
+    }
+    // Admin and Chief Mentor see all ATRs (no filter)
+
+    const { data: rows, error } = await query.order("created_at", { ascending: false });
+    
     if (error) handleSupabaseError(error);
     return (rows ?? []).map(row => ({ ...(row.payload as object), id: row.id }));
   });
@@ -278,6 +311,62 @@ export const saveAtrFn = createServerFn({ method: "POST" })
     });
     if (error) handleSupabaseError(error);
     return { ok: true };
+  });
+
+export const reviewAtrFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { atrId: string; user: AuthUser; action: "approve" | "reject"; remark?: string } }) => {
+    const { atrId, user, action, remark } = data;
+    const sb = getSupabase();
+
+    // 1. Fetch current ATR
+    const { data: row, error: fetchError } = await sb
+      .from("atrs")
+      .select("*")
+      .eq("id", atrId)
+      .single();
+
+    if (fetchError || !row) throw new Error("ATR not found");
+    const report = row.payload as any;
+
+    // 2. Determine next status
+    let nextStatus: AtrStatus = report.status;
+    const currentStatus = report.status as AtrStatus;
+
+    if (action === "approve") {
+      if (currentStatus === "submitted" || currentStatus === "coordinator_review") nextStatus = "hod_review";
+      else if (currentStatus === "hod_review") nextStatus = "chief_mentor_review";
+      else if (currentStatus === "chief_mentor_review") nextStatus = "approved";
+    } else {
+      nextStatus = "rejected";
+    }
+
+    // 3. Update timeline
+    const newEntry: AtrTimelineEntry = {
+      stage: nextStatus,
+      actor: user.name,
+      role: user.role,
+      remark: remark || (action === "approve" ? "Approved and forwarded." : "Returned with concerns."),
+      at: new Date().toISOString(),
+    };
+
+    const updatedTimeline = [...(report.timeline || []), newEntry];
+    const updatedReport = {
+      ...report,
+      status: nextStatus,
+      timeline: updatedTimeline,
+    };
+
+    // 4. Save
+    const { error: saveError } = await sb
+      .from("atrs")
+      .update({
+        payload: updatedReport,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", atrId);
+
+    if (saveError) handleSupabaseError(saveError);
+    return { ok: true, status: nextStatus };
   });
 
 export const deleteAllAtrsFn = createServerFn({ method: "POST" })

@@ -39,8 +39,8 @@ function CoordinatorPage() {
     if (user) {
       getMentorMappingsFn().then(mappings => {
         const myMentors = (mappings || [])
-          .filter((m: any) => m.coordinatorId === user.id)
-          .map((m: any) => m.mentorId);
+          .filter((m: any) => m.coordinator_id === user.id)
+          .map((m: any) => m.mentor_id);
         setAssignedMentorIds(myMentors);
       }).finally(() => setLoadingMapping(false));
     }

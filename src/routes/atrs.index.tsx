@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { useReports } from "@/lib/atr-store";
 import { STATUS_LABELS, type AtrStatus } from "@/lib/atr-types";
-import { getCurrentUser } from "@/lib/auth-store";
+import { getCurrentUser, useCurrentUser } from "@/lib/auth-store";
 
 export const Route = createFileRoute("/atrs/")({
   beforeLoad: () => {
@@ -34,6 +34,7 @@ const STATUS_OPTIONS: (AtrStatus | "all")[] = [
 ];
 
 function AtrListPage() {
+  const user = useCurrentUser();
   const reports = useReports();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<AtrStatus | "all">("all");
@@ -64,13 +65,15 @@ function AtrListPage() {
               Filter, search and review every report you've submitted.
             </p>
           </div>
-          <Link
-            to="/atrs/new"
-            className="inline-flex items-center gap-2 bg-growth text-growth-foreground px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-95 transition shrink-0"
-          >
-            <PlusCircle className="size-4" />
-            Create New ATR
-          </Link>
+          {user?.role === "mentor" && (
+            <Link
+              to="/atrs/new"
+              className="inline-flex items-center gap-2 bg-growth text-growth-foreground px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-95 transition shrink-0"
+            >
+              <PlusCircle className="size-4" />
+              Create New ATR
+            </Link>
+          )}
         </header>
 
         {/* Filters */}

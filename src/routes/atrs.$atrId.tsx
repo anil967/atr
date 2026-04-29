@@ -1,4 +1,5 @@
-import { createFileRoute, Link, redirect, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, notFound, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, Calendar, Clock, Users, Paperclip, FileDown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -7,6 +8,10 @@ import { ApprovalTimeline } from "@/components/approval-timeline";
 import { getReport } from "@/lib/atr-store";
 import { getCurrentUser } from "@/lib/auth-store";
 import { generateAtrPdf } from "@/lib/pdf-utils";
+import { reviewReport } from "@/lib/atr-store";
+import { toast } from "sonner";
+import { Loader2, CheckCircle, XCircle, MessageSquare } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/atrs/$atrId")({
   beforeLoad: () => {
@@ -34,19 +39,86 @@ export const Route = createFileRoute("/atrs/$atrId")({
 });
 
 function AtrDetailPage() {
+  const navigate = useNavigate();
   const { atrId } = Route.useParams();
+  const user = getCurrentUser();
   const report = getReport(atrId);
+
+  const [remark, setRemark] = useState("");
+  const [loading, setLoading] = useState(false);
+
   if (!report) throw notFound();
+
+  const isReviewer = 
+    (user?.role === "coordinator" && (report.status === "submitted" || report.status === "coordinator_review")) ||
+    (user?.role === "hod" && report.status === "hod_review") ||
+    (user?.role === "chief_mentor" && report.status === "chief_mentor_review");
+
+  const handleAction = async (action: "approve" | "reject") => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      await reviewReport(report.id, action, remark);
+      toast.success(action === "approve" ? "Report approved and forwarded." : "Report rejected.");
+      setRemark("");
+    } catch (err) {
+      toast.error("Action failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <AppShell>
       <div className="p-6 lg:p-12 max-w-6xl mx-auto space-y-8">
         <Link
           to="/atrs"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-growth"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-growth transition-colors"
         >
           <ArrowLeft className="size-4" /> Back to my ATRs
         </Link>
+
+        {isReviewer && (
+          <section className="bg-surface border-2 border-growth/20 rounded-[2rem] p-8 shadow-xl shadow-growth/5 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 text-growth font-bold text-[10px] uppercase tracking-widest mb-1">
+                  <Clock className="size-3" /> Action Required
+                </div>
+                <h2 className="text-2xl font-light tracking-tight">Perform <span className="italic font-display text-growth">Validation</span> Audit</h2>
+                <p className="text-sm text-muted-foreground">Review report data, add institutional remarks, and finalize status.</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleAction("reject")}
+                  disabled={loading}
+                  className="px-6 py-3 rounded-2xl text-sm font-bold bg-destructive/10 text-destructive hover:bg-destructive/15 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <XCircle className="size-4" /> Reject
+                </button>
+                <button
+                  onClick={() => handleAction("approve")}
+                  disabled={loading}
+                  className="px-8 py-3 rounded-2xl text-sm font-bold bg-growth text-growth-foreground hover:scale-105 active:scale-95 transition-all shadow-lg shadow-growth/20 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle className="size-4" />}
+                  Approve & Forward
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 relative">
+              <MessageSquare className="absolute left-4 top-4 size-4 text-muted-foreground" />
+              <textarea
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
+                placeholder="Add your review remarks or feedback here..."
+                className="w-full pl-11 pr-4 py-4 bg-secondary/20 border border-border/50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-growth/20 transition-all min-h-[100px] resize-none"
+              />
+            </div>
+          </section>
+        )}
 
         <header className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="min-w-0">

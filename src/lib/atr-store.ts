@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AtrReport, AtrStatus } from "./atr-types";
 import { getCurrentUser } from "./auth-store";
-import { getAtrsFn, saveAtrFn, deleteAllAtrsFn, getMentorMappingsFn } from "./auth-server";
+import { getAtrsFn, saveAtrFn, deleteAllAtrsFn, getMentorMappingsFn, reviewAtrFn } from "./auth-server";
 
 const KEY = "bcet-atr-reports-v4";
 const EVT = "bcet-atr-changed";
@@ -90,6 +90,34 @@ export async function clearAllAtrs() {
   await deleteAllAtrsFn();
 }
 
+export async function reviewReport(atrId: string, action: "approve" | "reject", remark?: string) {
+  const user = getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  
+  const result = await reviewAtrFn({ data: { atrId, user, action, remark } });
+  
+  // Update local storage if needed
+  const items = read();
+  const next = items.map(r => {
+    if (r.id === atrId) {
+      // We don't have the full updated report here easily without refetching or duplicating logic,
+      // but getAtrsFn will sync it eventually. For immediate UI update:
+      return { 
+        ...r, 
+        status: result.status,
+        timeline: [
+          ...(r.timeline || []), 
+          { stage: result.status, actor: user.name, role: user.role, remark, at: new Date().toISOString() }
+        ]
+      } as AtrReport;
+    }
+    return r;
+  });
+  write(next);
+  
+  return result;
+}
+
 export function useReports(): AtrReport[] {
   const [items, setItems] = useState<AtrReport[]>([]);
   
@@ -98,11 +126,14 @@ export function useReports(): AtrReport[] {
     setItems(listReports());
 
     // Background sync from MongoDB
-    getAtrsFn().then((remote) => {
-      if (remote && Array.isArray(remote)) {
-        write(remote); // This will trigger EVT and update UI
-      }
-    }).catch(console.error);
+    const user = getCurrentUser();
+    if (user) {
+      getAtrsFn({ data: { user } }).then((remote) => {
+        if (remote && Array.isArray(remote)) {
+          write(remote); // This will trigger EVT and update UI
+        }
+      }).catch(console.error);
+    }
 
     const handler = () => setItems(listReports());
     window.addEventListener(EVT, handler);

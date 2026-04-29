@@ -5,9 +5,10 @@ import { signupFn } from "@/lib/auth-server";
 import type { Role } from "@/lib/atr-types";
 import { getCurrentUser, getHomeRouteForRole } from "@/lib/auth-store";
 
-const ROLE_OPTIONS: Array<{ value: Extract<Role, "mentor" | "coordinator">; label: string }> = [
+const ROLE_OPTIONS: Array<{ value: Role; label: string }> = [
   { value: "mentor", label: "Mentor" },
   { value: "coordinator", label: "Coordinator" },
+  { value: "hod", label: "HOD" },
 ];
 const BRANCH_OPTIONS = ["CSE", "ME", "EE", "EEE", "MBA", "MCA"] as const;
 
@@ -30,7 +31,7 @@ function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [department, setDepartment] = useState<(typeof BRANCH_OPTIONS)[number]>("CSE");
-  const [role, setRole] = useState<Extract<Role, "mentor" | "coordinator">>("mentor");
+  const [role, setRole] = useState<Role>("mentor");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -145,7 +146,7 @@ function SignupPage() {
               <select
                 value={role}
                 onChange={(e) =>
-                  setRole(e.target.value as Extract<Role, "mentor" | "coordinator">)
+                  setRole(e.target.value as Role)
                 }
                 disabled={loading}
                 className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm"
