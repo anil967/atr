@@ -22,6 +22,7 @@ export type AtrStatus =
   | "coordinator_review"
   | "hod_review"
   | "chief_mentor_review"
+  | "iqac_review"
   | "approved"
   | "rejected";
 
@@ -31,6 +32,7 @@ export const STATUS_LABELS: Record<AtrStatus, string> = {
   coordinator_review: "Coordinator Review",
   hod_review: "HOD Review",
   chief_mentor_review: "Chief Mentor Review",
+  iqac_review: "IQAC Audit",
   approved: "Approved",
   rejected: "Rejected",
 };
@@ -79,6 +81,9 @@ export interface AtrReport {
   students: ParsedStudent[];
   actions: ActionItem[];
   attachments: AtrAttachment[];
+  description?: string;
+  coordinatorId?: string;
+  coordinatorName?: string;
   status: AtrStatus;
   timeline: AtrTimelineEntry[];
   createdAt: string;

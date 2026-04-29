@@ -134,7 +134,7 @@ function AtrDetailPage() {
             </p>
           </div>
           <button
-            onClick={() => generateAtrPdf(report)}
+            onClick={async () => await generateAtrPdf(report)}
             className="inline-flex items-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium hover:bg-secondary/80 transition-colors shrink-0"
           >
             <FileDown className="size-4" />

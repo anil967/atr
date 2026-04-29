@@ -74,10 +74,12 @@ export function useCurrentUser(): AuthUser | null {
   const [user, setUser] = useState<AuthUser | null>(() => getCurrentUser());
 
   useEffect(() => {
-    // Sync whenever the auth cookie changes (e.g. login/logout in another tab)
     const refresh = () => setUser(getCurrentUser());
+    
+    // Listen for manual store changes
     window.addEventListener("bcet-auth-changed", refresh);
     window.addEventListener("storage", refresh);
+
     return () => {
       window.removeEventListener("bcet-auth-changed", refresh);
       window.removeEventListener("storage", refresh);

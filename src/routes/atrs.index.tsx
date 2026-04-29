@@ -29,6 +29,7 @@ const STATUS_OPTIONS: (AtrStatus | "all")[] = [
   "coordinator_review",
   "hod_review",
   "chief_mentor_review",
+  "iqac_review",
   "approved",
   "rejected",
 ];
@@ -128,6 +129,12 @@ function AtrListPage() {
                     <span>📅 {format(new Date(r.startDate), "MMM d, yyyy")}</span>
                     <span>👥 {r.students.length} students</span>
                     <span>📂 {r.department}</span>
+                    {r.coordinatorName && (
+                      <span className="flex items-center gap-1.5">
+                        <span className="size-1 rounded-full bg-border" />
+                        👤 {r.coordinatorName}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

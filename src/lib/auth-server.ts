@@ -21,7 +21,7 @@ export interface PendingSignup {
   id: string;
   name: string;
   email: string;
-  role: Extract<Role, "mentor" | "coordinator">;
+  role: Extract<Role, "mentor" | "coordinator" | "hod">;
   department: string;
   createdAt: string;
 }
@@ -30,7 +30,7 @@ export interface ApprovedUser {
   id: string;
   name: string;
   email: string;
-  role: Extract<Role, "mentor" | "coordinator">;
+  role: Extract<Role, "mentor" | "coordinator" | "hod">;
   department: string;
   approvedAt: string | null;
 }
@@ -107,9 +107,7 @@ export const signupFn = createServerFn({ method: "POST" })
 
     if (existing) throw new Error("An account with this email already exists");
 
-    // Cost=10: secure and fast within Cloudflare's CPU limits
     const passwordHash = await bcrypt.hash(data.password, 10);
-
     const isHod = data.role === "hod";
 
     const { error } = await sb.from("users").insert({
@@ -147,7 +145,7 @@ export const getPendingSignupsFn = createServerFn({ method: "POST" }).handler(as
     .from("users")
     .select("*")
     .eq("approval_status", "pending")
-    .in("role", ["mentor", "coordinator"])
+    .in("role", ["mentor", "coordinator", "hod"])
     .order("created_at", { ascending: false });
 
   if (error) handleSupabaseError(error);
@@ -156,7 +154,7 @@ export const getPendingSignupsFn = createServerFn({ method: "POST" }).handler(as
     id: doc.id,
     name: String(doc.name),
     email: String(doc.email),
-    role: doc.role as "mentor" | "coordinator",
+    role: doc.role as "mentor" | "coordinator" | "hod",
     department: String(doc.department),
     createdAt: new Date(doc.created_at).toISOString(),
   }));
@@ -185,7 +183,7 @@ export const getSignupApprovalSummaryFn = createServerFn({ method: "POST" }).han
   const { data: docs, error } = await sb
     .from("users")
     .select("*")
-    .in("role", ["mentor", "coordinator"])
+    .in("role", ["mentor", "coordinator", "hod"])
     .order("department", { ascending: true })
     .order("name", { ascending: true });
 
@@ -206,7 +204,7 @@ export const getSignupApprovalSummaryFn = createServerFn({ method: "POST" }).han
         id: doc.id,
         name: String(doc.name),
         email: String(doc.email),
-        role: role as "mentor" | "coordinator",
+        role: role as "mentor" | "coordinator" | "hod",
         department: String(doc.department),
         createdAt: new Date(doc.created_at).toISOString(),
       });
@@ -218,7 +216,7 @@ export const getSignupApprovalSummaryFn = createServerFn({ method: "POST" }).han
         id: doc.id,
         name: String(doc.name),
         email: String(doc.email),
-        role: role as "mentor" | "coordinator",
+        role: role as "mentor" | "coordinator" | "hod",
         department: String(doc.department),
         approvedAt: doc.approved_at ? new Date(doc.approved_at).toISOString() : null,
       });
@@ -333,9 +331,11 @@ export const reviewAtrFn = createServerFn({ method: "POST" })
     const currentStatus = report.status as AtrStatus;
 
     if (action === "approve") {
-      if (currentStatus === "submitted" || currentStatus === "coordinator_review") nextStatus = "hod_review";
+      if (currentStatus === "submitted") nextStatus = "coordinator_review";
+      else if (currentStatus === "coordinator_review") nextStatus = "hod_review";
       else if (currentStatus === "hod_review") nextStatus = "chief_mentor_review";
-      else if (currentStatus === "chief_mentor_review") nextStatus = "approved";
+      else if (currentStatus === "chief_mentor_review") nextStatus = "iqac_review";
+      else if (currentStatus === "iqac_review") nextStatus = "approved";
     } else {
       nextStatus = "rejected";
     }
@@ -396,9 +396,24 @@ export const getAllUsersByRoleFn = createServerFn({ method: "POST" })
 export const getMentorMappingsFn = createServerFn({ method: "POST" })
   .handler(async () => {
     const sb = getSupabase();
-    const { data: rows, error } = await sb.from("mentor_mappings").select("*");
+    // Fetch mappings with coordinator names joined from users table
+    const { data: rows, error } = await sb
+      .from("mentor_mappings")
+      .select(`
+        mentor_id,
+        coordinator_id,
+        users!coordinator_id (
+          name
+        )
+      `);
+    
     if (error) handleSupabaseError(error);
-    return rows ?? [];
+    
+    return (rows ?? []).map((r: any) => ({
+      mentorId: r.mentor_id,
+      coordinatorId: r.coordinator_id,
+      coordinatorName: r.users?.name || "Unknown Coordinator"
+    }));
   });
 
 export const saveMentorMappingFn = createServerFn({ method: "POST" })

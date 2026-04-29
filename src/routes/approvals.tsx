@@ -53,7 +53,7 @@ function ApprovalsPage() {
   const [approvedMentors, setApprovedMentors] = useState(0);
   const [approvedCoordinators, setApprovedCoordinators] = useState(0);
   const [sortBy, setSortBy] = useState<BranchSort>("branch_asc");
-  const [roleFilter, setRoleFilter] = useState<"all" | "mentor" | "coordinator">("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "mentor" | "coordinator" | "hod">("all");
   const [pendingOpen, setPendingOpen] = useState(true);
   const [approvedOpen, setApprovedOpen] = useState(true);
   const [statusTab, setStatusTab] = useState<"pending" | "approved" | "rejected" | "details" | "assignments">("pending");
@@ -215,6 +215,7 @@ function ApprovalsPage() {
                 <option value="all">All Roles</option>
                 <option value="mentor">Mentors Only</option>
                 <option value="coordinator">Coordinators Only</option>
+                <option value="hod">HODs Only</option>
               </select>
             </div>
             <div className="w-full md:w-48">

@@ -53,12 +53,14 @@ export async function createReport(input: Omit<AtrReport, "id" | "status" | "tim
   const nowIso = new Date().toISOString();
 
   // Lookup assigned coordinator
+  let coordinatorId: string | undefined;
   let coordinatorName = "Pending Assignment";
   try {
     const mappings = await getMentorMappingsFn();
     const mapping = mappings?.find((m: any) => m.mentorId === input.mentorId);
     if (mapping) {
-      coordinatorName = "Assigned Coordinator"; 
+      coordinatorId = mapping.coordinatorId;
+      coordinatorName = mapping.coordinatorName;
     }
   } catch (e) {
     console.error("Mapping lookup failed", e);
@@ -67,6 +69,8 @@ export async function createReport(input: Omit<AtrReport, "id" | "status" | "tim
   const report: AtrReport = {
     ...input,
     id,
+    coordinatorId,
+    coordinatorName,
     status: "submitted",
     createdAt: nowIso,
     timeline: [

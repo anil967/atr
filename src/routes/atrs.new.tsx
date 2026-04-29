@@ -40,6 +40,7 @@ function NewAtrPage() {
     { id: crypto.randomUUID(), issue: "", studentCount: 0, actionTaken: "", timeline: "", outcome: "" }
   ]);
   const [students, setStudents] = useState<ParsedStudent[]>([]);
+  const [description, setDescription] = useState("");
   const [excelName, setExcelName] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<AtrAttachment[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -112,10 +113,15 @@ function NewAtrPage() {
     setAttachments(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const wordCount = useMemo(() => {
+    return description.trim() ? description.trim().split(/\s+/).length : 0;
+  }, [description]);
+
   const canSubmit = useMemo(() => {
     return title.trim().length > 0 && 
+           wordCount <= 250 &&
            actions.some(a => a.issue.trim() && a.actionTaken.trim());
-  }, [title, actions]);
+  }, [title, actions, wordCount]);
 
   const handleSubmit = async () => {
     if (!canSubmit || !user) return;
@@ -131,10 +137,11 @@ function NewAtrPage() {
         students,
         actions: actions.filter(a => a.issue.trim() && a.actionTaken.trim()),
         attachments,
+        description: description.trim(),
       });
       
       try {
-        generateAtrPdf(report);
+        await generateAtrPdf(report);
       } catch (err) {
         console.error("PDF gen failed", err);
       }
@@ -230,6 +237,34 @@ function NewAtrPage() {
                         className="w-full px-5 py-4 bg-secondary/20 border border-border/50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-growth/20 focus:bg-background transition-all"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">Report Description</label>
+                      <span className={cn(
+                        "text-[10px] font-bold uppercase tracking-widest",
+                        wordCount > 250 ? "text-destructive" : "text-muted-foreground"
+                      )}>
+                        {wordCount} / 250 Words
+                      </span>
+                    </div>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Summarize the overall progress and objectives of this session..."
+                      rows={4}
+                      className={cn(
+                        "w-full px-5 py-4 bg-secondary/20 border rounded-2xl text-base focus:outline-none focus:ring-2 focus:bg-background transition-all resize-none",
+                        wordCount > 250 ? "border-destructive focus:ring-destructive/20" : "border-border/50 focus:ring-growth/20"
+                      )}
+                    />
+                    {wordCount > 250 && (
+                      <p className="mt-2 text-xs text-destructive flex items-center gap-1.5 font-medium">
+                        <AlertCircle className="size-3.5" />
+                        Please keep the description within 250 words.
+                      </p>
+                    )}
                   </div>
                 </div>
               </section>
