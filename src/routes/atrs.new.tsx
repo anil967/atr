@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, type ChangeEvent, useMemo } from "react";
+import { useState, useEffect, type ChangeEvent, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { 
   ArrowLeft, Upload, FileSpreadsheet, ImagePlus, X, Check, Plus, 
   ChevronRight, ChevronLeft, CalendarDays, ClipboardList, Users as UsersIcon, 
-  FileCheck, Sparkles, AlertCircle
+  FileCheck, Sparkles, AlertCircle, Paperclip
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser, useCurrentUser } from "@/lib/auth-store";
@@ -29,8 +29,27 @@ type Step = "basics" | "actions" | "verification";
 function NewAtrPage() {
   const user = useCurrentUser();
   const navigate = useNavigate();
-  const [activeStep, setActiveStep] = useState<Step>("basics");
+  const [activeStep, setActiveStep] = useState<"basics" | "actions" | "verification">("basics");
   const [submitting, setSubmitting] = useState(false);
+  
+  const [modal, setModal] = useState({
+    isOpen: false,
+    rowId: "",
+    field: "",
+    value: "",
+    label: ""
+  });
+
+  const openModal = (rowId: string, field: string, value: string, label: string) => {
+    setModal({ isOpen: true, rowId, field, value, label });
+  };
+
+  const closeModal = () => setModal(m => ({ ...m, isOpen: false }));
+  
+  const saveModal = () => {
+    updateActionRow(modal.rowId, modal.field, modal.value);
+    closeModal();
+  };
 
   // Form State
   const [title, setTitle] = useState("");
@@ -56,8 +75,21 @@ function NewAtrPage() {
   };
 
   const updateActionRow = (id: string, field: string, value: any) => {
-    setActions(actions.map(a => a.id === id ? { ...a, [field]: value } : a));
+    setActions(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
+
+  // Load students for this mentor
+  useEffect(() => {
+    if (user?.id) {
+      import("@/lib/auth-server").then(({ getStudentsFn }) => {
+        getStudentsFn({ data: { mentorId: user.id } }).then(remoteStudents => {
+          if (remoteStudents && Array.isArray(remoteStudents)) {
+            setStudents(remoteStudents);
+          }
+        });
+      });
+    }
+  }, [user?.id]);
 
   const handleExcel = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,6 +123,43 @@ function NewAtrPage() {
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  const handleRowFileUpload = (rowId: string, e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        setActions(prev => prev.map(a => {
+          if (a.id === rowId) {
+            const currentFiles = a.evidenceFiles || [];
+            return {
+              ...a,
+              evidenceFiles: [...currentFiles, {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                dataUrl: file.type.startsWith("image/") ? evt.target?.result as string : undefined
+              }]
+            };
+          }
+          return a;
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeRowFile = (rowId: string, fileIdx: number) => {
+    setActions(prev => prev.map(a => {
+      if (a.id === rowId) {
+        return {
+          ...a,
+          evidenceFiles: (a.evidenceFiles || []).filter((_, i) => i !== fileIdx)
+        };
+      }
+      return a;
+    }));
   };
 
   const handleAttachments = (e: ChangeEvent<HTMLInputElement>) => {
@@ -300,52 +369,65 @@ function NewAtrPage() {
                   </button>
                 </div>
 
-                <div className="w-full">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-secondary/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        <th className="px-8 py-5 w-16 text-center">#</th>
-                        <th className="px-4 py-5 w-[22%]">Issue Identified</th>
-                        <th className="px-4 py-5 w-28 text-center">Qty</th>
-                        <th className="px-4 py-5 w-[25%]">Action Taken</th>
-                        <th className="px-4 py-5 w-40">Timeline</th>
-                        <th className="px-4 py-5 w-[25%]">Outcome</th>
-                        <th className="px-8 py-5 w-16 text-center"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
+                <div className="overflow-x-auto pb-6">
+                <table className="w-full border-collapse table-fixed min-w-[1200px]">
+                  <thead>
+                    <tr className="border-b border-border/60">
+                      <th className="py-5 w-16 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">#</th>
+                      <th className="px-4 py-5 w-[20%] text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Issue Identified</th>
+                      <th className="px-4 py-5 w-32 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">No. of Students</th>
+                      <th className="px-4 py-5 w-[20%] text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Action Taken</th>
+                      <th className="px-4 py-5 w-32 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Timeline</th>
+                      <th className="px-4 py-5 w-[20%] text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Outcome</th>
+                      <th className="px-4 py-5 w-[20%] text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence</th>
+                      <th className="py-5 w-16 text-center"></th>
+                    </tr>
+                  </thead>
+                    <tbody className="divide-y divide-border/40">
                       {actions.map((row, idx) => (
                         <tr key={row.id} className="group hover:bg-secondary/10 transition-colors">
-                          <td className="px-8 py-8 text-center text-xs text-muted-foreground font-mono">{idx + 1}</td>
-                          <td className="px-2 py-6">
-                            <textarea
-                              value={row.issue}
-                              onChange={(e) => updateActionRow(row.id, "issue", e.target.value)}
-                              rows={2}
-                              className="w-full px-4 py-3 bg-secondary/20 border-transparent border focus:border-growth focus:bg-background focus:outline-none rounded-xl text-sm transition-all resize-none"
-                              placeholder="Detail the issue..."
-                            />
+                          <td className="py-4 text-center">
+                            <span className="text-xs font-bold text-growth tabular-nums">{idx + 1}</span>
                           </td>
-                          <td className="px-2 py-4">
-                            <div className="flex justify-center">
-                              <input
-                                type="number"
-                                value={row.studentCount}
-                                onChange={(e) => updateActionRow(row.id, "studentCount", Number(e.target.value))}
-                                className="w-20 px-3 py-3 bg-secondary/30 border border-border/50 focus:border-growth focus:bg-background focus:outline-none rounded-xl text-sm text-center font-bold transition-all"
-                              />
+                          <td className="px-4 py-4">
+                            <div
+                              onClick={() => openModal(row.id, "issue", row.issue, "Issue Identified")}
+                              className="w-full px-4 py-3 bg-secondary/20 border-transparent border hover:border-growth/40 hover:bg-secondary/30 cursor-pointer rounded-xl text-sm transition-all min-h-[80px] overflow-hidden line-clamp-3"
+                            >
+                              {row.issue || <span className="text-muted-foreground/50">Detail the issue...</span>}
                             </div>
                           </td>
-                          <td className="px-2 py-4">
-                            <textarea
-                              value={row.actionTaken}
-                              onChange={(e) => updateActionRow(row.id, "actionTaken", e.target.value)}
-                              rows={2}
-                              className="w-full px-4 py-3 bg-secondary/20 border-transparent border focus:border-growth focus:bg-background focus:outline-none rounded-xl text-sm transition-all resize-none"
-                              placeholder="Execution steps..."
-                            />
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col items-center gap-1">
+                              <input
+                                type="number"
+                                min={0}
+                                max={students.length}
+                                value={row.studentCount}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  const max = students.length;
+                                  if (val > max) {
+                                    toast.error(`Limit exceeded: Group only has ${max} students`);
+                                    updateActionRow(row.id, "studentCount", max);
+                                  } else {
+                                    updateActionRow(row.id, "studentCount", Math.max(0, val));
+                                  }
+                                }}
+                                className="w-20 px-2 py-3 bg-secondary/30 border border-border/50 focus:border-growth focus:bg-background focus:outline-none rounded-xl text-sm text-center font-bold transition-all"
+                              />
+                              <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-tighter">Max: {students.length}</span>
+                            </div>
                           </td>
-                          <td className="px-2 py-4">
+                          <td className="px-4 py-4">
+                            <div
+                              onClick={() => openModal(row.id, "actionTaken", row.actionTaken, "Action Taken")}
+                              className="w-full px-4 py-3 bg-secondary/20 border-transparent border hover:border-growth/40 hover:bg-secondary/30 cursor-pointer rounded-xl text-sm transition-all min-h-[80px] overflow-hidden line-clamp-3"
+                            >
+                              {row.actionTaken || <span className="text-muted-foreground/50">Execution steps...</span>}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
                             <input
                               type="text"
                               value={row.timeline}
@@ -354,16 +436,45 @@ function NewAtrPage() {
                               placeholder="e.g. Day 1"
                             />
                           </td>
-                          <td className="px-2 py-4">
-                            <textarea
-                              value={row.outcome}
-                              onChange={(e) => updateActionRow(row.id, "outcome", e.target.value)}
-                              rows={2}
-                              className="w-full px-4 py-3 bg-secondary/20 border-transparent border focus:border-growth focus:bg-background focus:outline-none rounded-xl text-sm transition-all resize-none"
-                              placeholder="Measurable results..."
-                            />
+                          <td className="px-4 py-4">
+                            <div
+                              onClick={() => openModal(row.id, "outcome", row.outcome, "Outcome")}
+                              className="w-full px-4 py-3 bg-secondary/20 border-transparent border hover:border-growth/40 hover:bg-secondary/30 cursor-pointer rounded-xl text-sm transition-all min-h-[80px] overflow-hidden line-clamp-3"
+                            >
+                              {row.outcome || <span className="text-muted-foreground/50">Measurable results...</span>}
+                            </div>
                           </td>
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-1.5">
+                              {(row.evidenceFiles || []).map((file, fIdx) => (
+                                <div key={fIdx} className="flex items-center justify-between gap-2 px-2 py-1.5 bg-growth/5 border-growth/10 border rounded-lg group/file">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <FileCheck className="size-2.5 text-growth shrink-0" />
+                                    <span className="text-[8px] font-bold truncate text-growth/80">{file.name}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => removeRowFile(row.id, fIdx)}
+                                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0 opacity-0 group-hover/file:opacity-100"
+                                  >
+                                    <X className="size-2.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              
+                              <label className="flex items-center justify-center gap-2 px-3 py-2 bg-secondary/10 border-border/40 border-dashed border hover:border-growth/50 hover:bg-growth/5 cursor-pointer rounded-lg text-[9px] font-bold uppercase transition-all mt-1">
+                                <Plus className="size-2.5 text-muted-foreground" />
+                                <span>Add Evidence</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept=".pdf,.doc,.docx,image/*"
+                                  onChange={(e) => handleRowFileUpload(row.id, e)}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                          </td>
+                          <td className="py-4 text-center">
                             <button
                               onClick={() => removeActionRow(row.id)}
                               disabled={actions.length === 1}
@@ -494,6 +605,49 @@ function NewAtrPage() {
           )}
         </div>
       </div>
+
+      {/* Text Entry Modal */}
+      {modal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 md:p-12">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-xl animate-in fade-in duration-300" onClick={closeModal} />
+          <div className="relative w-full max-w-2xl bg-surface border border-border shadow-2xl rounded-[2.5rem] overflow-hidden animate-in zoom-in-95 fade-in duration-300">
+            <header className="px-8 py-6 border-b border-border/60 flex items-center justify-between bg-secondary/20">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Editing Field</p>
+                <h3 className="text-xl font-medium">{modal.label}</h3>
+              </div>
+              <button onClick={closeModal} className="size-10 rounded-full hover:bg-secondary flex items-center justify-center transition-colors">
+                <X className="size-5" />
+              </button>
+            </header>
+            
+            <div className="p-8">
+              <textarea
+                autoFocus
+                value={modal.value}
+                onChange={(e) => setModal(m => ({ ...m, value: e.target.value }))}
+                className="w-full h-64 bg-secondary/30 border border-border focus:border-growth focus:bg-background focus:outline-none rounded-2xl p-6 text-base transition-all resize-none leading-relaxed"
+                placeholder={`Type your ${modal.label.toLowerCase()} here...`}
+              />
+            </div>
+
+            <footer className="px-8 py-6 bg-secondary/10 border-t border-border/60 flex items-center justify-end gap-4">
+              <button 
+                onClick={closeModal}
+                className="px-6 py-3 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={saveModal}
+                className="bg-foreground text-background px-8 py-3 rounded-xl font-bold hover:opacity-90 transition shadow-lg shadow-foreground/10"
+              >
+                Confirm Changes
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

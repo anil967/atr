@@ -102,7 +102,8 @@ function ApprovalsPage() {
 
 
   const sortedPending = useMemo(() => {
-    let items = [...pendingUsers];
+    // Filter out HODs
+    let items = pendingUsers.filter(u => u.role !== "hod");
     
     // Filter by Role
     if (roleFilter !== "all") {
@@ -123,7 +124,8 @@ function ApprovalsPage() {
   }, [pendingUsers, sortBy, roleFilter]);
 
   const sortedApproved = useMemo(() => {
-    let items = [...approvedUsers];
+    // Filter out HODs and keep only mentors/coordinators
+    let items = approvedUsers.filter(u => u.role !== "hod");
 
     // Filter by Role
     if (roleFilter !== "all") {
@@ -213,9 +215,8 @@ function ApprovalsPage() {
                 className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:ring-2 focus:ring-growth/20 outline-none transition-all"
               >
                 <option value="all">All Roles</option>
-                <option value="mentor">Mentors Only</option>
-                <option value="coordinator">Coordinators Only</option>
-                <option value="hod">HODs Only</option>
+                <option value="mentor">Mentors</option>
+                <option value="coordinator">Coordinators</option>
               </select>
             </div>
             <div className="w-full md:w-48">
@@ -264,7 +265,7 @@ function ApprovalsPage() {
               "px-1.5 py-0.5 rounded-md text-[10px]",
               statusTab === "approved" ? "bg-growth/10" : "bg-secondary"
             )}>
-              {approvedCount}
+              {sortedApproved.length}
             </span>
           </button>
           <button
@@ -294,7 +295,7 @@ function ApprovalsPage() {
               "px-1.5 py-0.5 rounded-md text-[10px]",
               statusTab === "details" ? "bg-growth/10" : "bg-secondary"
             )}>
-              {approvedCount}
+              {sortedApproved.length}
             </span>
           </button>
           <button

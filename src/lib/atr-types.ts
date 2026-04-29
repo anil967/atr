@@ -68,6 +68,7 @@ export interface ActionItem {
   timeline: string;
   outcome: string;
   evidenceLink?: string;
+  evidenceFiles?: AtrAttachment[];
 }
 
 export interface AtrReport {
