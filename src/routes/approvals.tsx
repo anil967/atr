@@ -549,8 +549,10 @@ function MentorAssignments({ coordinators }: { coordinators: ApprovedUser[] }) {
       ]);
       setMentors(m || []);
       const mObj: Record<string, string> = {};
-      (map || []).forEach((item: any) => {
-        mObj[item.mentor_id] = item.coordinator_id;
+      (map || []).forEach((item: { mentorId?: string; mentor_id?: string; coordinatorId?: string; coordinator_id?: string }) => {
+        const mid = item.mentorId ?? item.mentor_id;
+        const cid = item.coordinatorId ?? item.coordinator_id;
+        if (mid && cid) mObj[mid] = cid;
       });
       setMappings(mObj);
       setSelectedCoordinators(mObj);

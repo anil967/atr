@@ -62,17 +62,81 @@ export interface AtrTimelineEntry {
   at: string; // ISO
 }
 
+/** HOD / Chief Mentor per-line response — Agree (tick) or Disagree (cross); stored on the PDF. */
+export type HodLineDecision = "agreed" | "disagreed";
+
+/** Persisted checklist when HOD forwards to Chief Mentor. */
+export interface HodValidationChecklist {
+  mentoringProcessEffective: HodLineDecision;
+  careerGuidanceMoreStructured: HodLineDecision;
+  deptCareerProgramsIntegrated: HodLineDecision;
+}
+
 /** Persisted when HOD forwards to Chief Mentor — powers HOD departmental review PDF regeneration. */
 export interface HodValidationSnapshot {
   hodName: string;
   hodDepartment: string;
   hodEmail?: string;
-  checklist: {
-    mentoringEffectiveAndCareerPrograms: boolean;
-  };
+  checklist: HodValidationChecklist;
   reviewRemarks?: string;
   /** ISO timestamp — set server-side when saved. */
   validatedAt?: string;
+}
+
+/** Normalize stored checklist for PDF — supports legacy boolean rows and single-flag payloads. */
+export function normalizeHodValidationChecklist(
+  checklist: HodValidationSnapshot["checklist"] | Record<string, unknown> | undefined,
+): HodValidationChecklist {
+  const toDecision = (v: unknown): HodLineDecision => {
+    if (v === "agreed" || v === "disagreed") return v;
+    if (v === true) return "agreed";
+    if (v === false) return "disagreed";
+    return "agreed";
+  };
+
+  if (!checklist || typeof checklist !== "object") {
+    return {
+      mentoringProcessEffective: "agreed",
+      careerGuidanceMoreStructured: "agreed",
+      deptCareerProgramsIntegrated: "agreed",
+    };
+  }
+  const c = checklist as Record<string, unknown>;
+  const a = c.mentoringProcessEffective;
+  const b = c.careerGuidanceMoreStructured;
+  const d = c.deptCareerProgramsIntegrated;
+  if (
+    (a === "agreed" || a === "disagreed") &&
+    (b === "agreed" || b === "disagreed") &&
+    (d === "agreed" || d === "disagreed")
+  ) {
+    return {
+      mentoringProcessEffective: a,
+      careerGuidanceMoreStructured: b,
+      deptCareerProgramsIntegrated: d,
+    };
+  }
+  if (typeof a === "boolean" && typeof b === "boolean" && typeof d === "boolean") {
+    return {
+      mentoringProcessEffective: toDecision(a),
+      careerGuidanceMoreStructured: toDecision(b),
+      deptCareerProgramsIntegrated: toDecision(d),
+    };
+  }
+  const legacy = !!(c as { mentoringEffectiveAndCareerPrograms?: boolean }).mentoringEffectiveAndCareerPrograms;
+  const leg = toDecision(legacy);
+  return {
+    mentoringProcessEffective: leg,
+    careerGuidanceMoreStructured: leg,
+    deptCareerProgramsIntegrated: leg,
+  };
+}
+
+/** Persisted checklist when Chief Mentor forwards to IQAC. */
+export interface ChiefMentorValidationChecklist {
+  disciplineIssuesHandledWell: HodLineDecision;
+  coordinationWithMentorsContinued: HodLineDecision;
+  sustainedEffortsBehaviorImprovement: HodLineDecision;
 }
 
 /** Persisted when Chief Mentor forwards to IQAC — Chief Mentor approval PDF. */
@@ -80,11 +144,58 @@ export interface ChiefMentorValidationSnapshot {
   chiefMentorName: string;
   chiefMentorDepartment?: string;
   chiefMentorEmail?: string;
-  checklist: {
-    endorsesInstitutionalProgression: boolean;
-  };
+  checklist: ChiefMentorValidationChecklist;
   reviewRemarks?: string;
   validatedAt?: string;
+}
+
+/** Normalize stored Chief Mentor checklist — supports legacy single boolean. */
+export function normalizeChiefMentorValidationChecklist(
+  checklist: ChiefMentorValidationSnapshot["checklist"] | Record<string, unknown> | undefined,
+): ChiefMentorValidationChecklist {
+  const toDecision = (v: unknown): HodLineDecision => {
+    if (v === "agreed" || v === "disagreed") return v;
+    if (v === true) return "agreed";
+    if (v === false) return "disagreed";
+    return "agreed";
+  };
+
+  if (!checklist || typeof checklist !== "object") {
+    return {
+      disciplineIssuesHandledWell: "agreed",
+      coordinationWithMentorsContinued: "agreed",
+      sustainedEffortsBehaviorImprovement: "agreed",
+    };
+  }
+  const c = checklist as Record<string, unknown>;
+  const a = c.disciplineIssuesHandledWell;
+  const b = c.coordinationWithMentorsContinued;
+  const d = c.sustainedEffortsBehaviorImprovement;
+  if (
+    (a === "agreed" || a === "disagreed") &&
+    (b === "agreed" || b === "disagreed") &&
+    (d === "agreed" || d === "disagreed")
+  ) {
+    return {
+      disciplineIssuesHandledWell: a,
+      coordinationWithMentorsContinued: b,
+      sustainedEffortsBehaviorImprovement: d,
+    };
+  }
+  const legacy = !!(c as { endorsesInstitutionalProgression?: boolean }).endorsesInstitutionalProgression;
+  const leg = toDecision(legacy);
+  return {
+    disciplineIssuesHandledWell: leg,
+    coordinationWithMentorsContinued: leg,
+    sustainedEffortsBehaviorImprovement: leg,
+  };
+}
+
+/** Coordinator checklist — Agree / Disagree per line (same persisted shape as HOD / Chief Mentor). */
+export interface CoordinatorValidationChecklist {
+  allParametersAddressed: HodLineDecision;
+  mentorProactive: HodLineDecision;
+  continuousMonitoringSuggested: HodLineDecision;
 }
 
 /** Persisted when a coordinator forwards to HOD; used to regenerate the coordinator validation PDF. */
@@ -92,14 +203,57 @@ export interface CoordinatorValidationSnapshot {
   coordinatorName: string;
   coordinatorDepartment: string;
   coordinatorEmail?: string;
-  checklist: {
-    allParametersAddressed: boolean;
-    mentorProactive: boolean;
-    continuousMonitoringSuggested: boolean;
-  };
+  checklist: CoordinatorValidationChecklist;
   reviewRemarks?: string;
   /** ISO timestamp when coordinator approved — set server-side when saved. */
   validatedAt?: string;
+}
+
+/** Normalize coordinator checklist — supports legacy three-boolean payloads from older clients. */
+export function normalizeCoordinatorValidationChecklist(
+  checklist: CoordinatorValidationSnapshot["checklist"] | Record<string, unknown> | undefined,
+): CoordinatorValidationChecklist {
+  const toDecision = (v: unknown): HodLineDecision => {
+    if (v === "agreed" || v === "disagreed") return v;
+    if (v === true) return "agreed";
+    if (v === false) return "disagreed";
+    return "agreed";
+  };
+
+  if (!checklist || typeof checklist !== "object") {
+    return {
+      allParametersAddressed: "agreed",
+      mentorProactive: "agreed",
+      continuousMonitoringSuggested: "agreed",
+    };
+  }
+  const c = checklist as Record<string, unknown>;
+  const a = c.allParametersAddressed;
+  const b = c.mentorProactive;
+  const d = c.continuousMonitoringSuggested;
+  if (
+    (a === "agreed" || a === "disagreed") &&
+    (b === "agreed" || b === "disagreed") &&
+    (d === "agreed" || d === "disagreed")
+  ) {
+    return {
+      allParametersAddressed: a,
+      mentorProactive: b,
+      continuousMonitoringSuggested: d,
+    };
+  }
+  if (typeof a === "boolean" && typeof b === "boolean" && typeof d === "boolean") {
+    return {
+      allParametersAddressed: toDecision(a),
+      mentorProactive: toDecision(b),
+      continuousMonitoringSuggested: toDecision(d),
+    };
+  }
+  return {
+    allParametersAddressed: toDecision(a),
+    mentorProactive: toDecision(b),
+    continuousMonitoringSuggested: toDecision(d),
+  };
 }
 
 export interface ActionItem {

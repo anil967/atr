@@ -2,10 +2,14 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import {
+  normalizeChiefMentorValidationChecklist,
+  normalizeCoordinatorValidationChecklist,
+  normalizeHodValidationChecklist,
   formatAcademicYearHuman,
   type AtrReport,
   type ChiefMentorValidationSnapshot,
   type CoordinatorValidationSnapshot,
+  type HodLineDecision,
   type HodValidationSnapshot,
 } from "./atr-types";
 
@@ -21,6 +25,75 @@ function pdfPageCount(doc: jsPDF): number {
     /* ignore */
   }
   return 1;
+}
+
+/** Inset from physical edges (mm) — matches institutional cover layout comments in {@link generateAtrPdf}. */
+const PDF_PAGE_MARGIN_L = 6;
+const PDF_PAGE_MARGIN_T = 4;
+
+/** Thin black frame on every page — same geometry as the original single-page rect. */
+function drawPdfPageMarginBorder(doc: jsPDF): void {
+  const w = doc.internal.pageSize.width;
+  const h = doc.internal.pageSize.height;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.4);
+  doc.rect(PDF_PAGE_MARGIN_L, PDF_PAGE_MARGIN_T, w - 12, h - 8);
+}
+
+function applyMarginBorderAllPages(doc: jsPDF): void {
+  const total = pdfPageCount(doc);
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p);
+    drawPdfPageMarginBorder(doc);
+  }
+}
+
+/** jsPDF Helvetica has no reliable ✓/✗ glyphs — draw tick/cross with vectors next to the label. */
+function pdfDrawHodTick(
+  doc: jsPDF,
+  xLeft: number,
+  baselineY: number,
+  sizeMm: number,
+  rgb: readonly [number, number, number],
+): void {
+  doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+  doc.setLineWidth(0.48);
+  doc.setLineCap("round");
+  doc.setLineJoin("round");
+  const s = sizeMm;
+  const by = baselineY;
+  const x0 = xLeft;
+  const xCorner = x0 + s * 0.4;
+  const yCorner = by - s * 0.2;
+  doc.line(x0 + s * 0.06, yCorner - s * 0.32, xCorner, yCorner);
+  doc.line(xCorner, yCorner, x0 + s * 0.94, by - s * 0.78);
+  doc.setLineWidth(0.2);
+  doc.setLineCap("butt");
+  doc.setLineJoin("miter");
+  doc.setDrawColor(0, 0, 0);
+}
+
+function pdfDrawHodCross(
+  doc: jsPDF,
+  xLeft: number,
+  baselineY: number,
+  sizeMm: number,
+  rgb: readonly [number, number, number],
+): void {
+  doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+  doc.setLineWidth(0.48);
+  doc.setLineCap("round");
+  const s = sizeMm;
+  const by = baselineY;
+  const x0 = xLeft;
+  const pad = s * 0.18;
+  const yTop = by - s + pad * 0.4;
+  const yBot = by - pad * 0.7;
+  doc.line(x0 + pad, yTop, x0 + s - pad, yBot);
+  doc.line(x0 + s - pad, yTop, x0 + pad, yBot);
+  doc.setLineWidth(0.2);
+  doc.setLineCap("butt");
+  doc.setDrawColor(0, 0, 0);
 }
 
 /** Passed into PDF generation — same shape as {@link CoordinatorValidationSnapshot}. */
@@ -166,23 +239,27 @@ export async function generateAtrPdf(
   const SECONDARY_COLOR = [71, 85, 105] as [number, number, number];
   const BORDER_COLOR = [226, 232, 240] as [number, number, number];
 
-  // Page border
-  doc.setDrawColor(...BORDER_COLOR);
-  doc.setLineWidth(0.4);
-  doc.rect(6, 4, pageWidth - 12, pageHeight - 8);
-
   const chiefPdf = chiefMentorAudit ?? null;
   const coordPassed = coordinatorAudit ?? null;
   const hodPassed = hodAudit ?? null;
-  /** When generating the Chief Mentor PDF, include earlier stages from the report if not passed explicitly. */
-  const hodForFront = hodPassed ?? (chiefPdf ? report.hodValidation ?? null : null);
-  const coordForFront =
-    coordPassed ?? (chiefPdf ? report.coordinatorValidation ?? null : null);
-  const annexStyle = !!(coordForFront || hodForFront || chiefPdf);
   const iqacMergedChain = opts?.iqacMergedChain === true && !!chiefPdf;
+  /**
+   * Standalone Chief Mentor PDF includes only Chief Mentor validation — do not pull HOD/coordinator from the report.
+   * IQAC merged export passes all three audits explicitly and sets {@link iqacMergedChain}.
+   */
+  const hodForFront =
+    hodPassed ?? (iqacMergedChain ? report.hodValidation ?? null : null);
+  const coordForFront =
+    coordPassed ?? (iqacMergedChain ? report.coordinatorValidation ?? null : null);
+  const annexStyle = !!(coordForFront || hodForFront || chiefPdf);
   /** Title is "COORDINATOR VALIDATION REPORT" — header omits mentor/cycle row. */
   const standaloneCoordinatorValidationPdf =
     !!coordForFront && !chiefPdf && !hodForFront;
+  /** HOD-only export — omit mentor name / mentor department (HOD confirmation lists HOD + dept). */
+  const standaloneHodValidationPdf = !!hodForFront && !chiefPdf && !coordForFront;
+  /** Chief-only export — omit mentor/dept row (same trim as HOD-only). */
+  const standaloneChiefMentorValidationPdf =
+    !!chiefPdf && !hodForFront && !coordForFront && !iqacMergedChain;
 
   // ─────────────────────────────────────────────────────────────
   // 📄 Report Title  (tight below divider)
@@ -315,18 +392,44 @@ export async function generateAtrPdf(
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...SECONDARY_COLOR);
-    doc.text("MENTOR NAME", ML, y);
-    doc.text("DEPARTMENT", pageWidth / 2, y, { align: "center" });
-    doc.text("CYCLE TIMELINE", MR, y, { align: "right" });
+    if (standaloneChiefMentorValidationPdf && chiefPdf) {
+      doc.text("CHIEF MENTOR", ML, y);
+      doc.text("CYCLE TIMELINE", MR, y, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+      doc.text(chiefPdf.chiefMentorName, ML, y + 5);
+      doc.text(
+        `${format(new Date(report.startDate), "MMM d")} - ${format(new Date(report.endDate), "MMM d, yyyy")}`,
+        MR,
+        y + 5,
+        { align: "right" },
+      );
+    } else if (standaloneHodValidationPdf) {
+      doc.text("CYCLE TIMELINE", MR, y, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+      doc.text(
+        `${format(new Date(report.startDate), "MMM d")} - ${format(new Date(report.endDate), "MMM d, yyyy")}`,
+        MR,
+        y + 5,
+        { align: "right" },
+      );
+    } else {
+      doc.text("MENTOR NAME", ML, y);
+      doc.text("DEPARTMENT", pageWidth / 2, y, { align: "center" });
+      doc.text("CYCLE TIMELINE", MR, y, { align: "right" });
 
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(30, 41, 59);
-    doc.text(report.mentorName, ML, y + 5);
-    doc.text(report.department, pageWidth / 2, y + 5, { align: "center" });
-    doc.text(
-      `${format(new Date(report.startDate), "MMM d")} - ${format(new Date(report.endDate), "MMM d, yyyy")}`,
-      MR, y + 5, { align: "right" },
-    );
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+      doc.text(report.mentorName, ML, y + 5);
+      doc.text(report.department, pageWidth / 2, y + 5, { align: "center" });
+      doc.text(
+        `${format(new Date(report.startDate), "MMM d")} - ${format(new Date(report.endDate), "MMM d, yyyy")}`,
+        MR,
+        y + 5,
+        { align: "right" },
+      );
+    }
 
     y += 18;
   }
@@ -335,11 +438,152 @@ export async function generateAtrPdf(
 
   const actions = report.actions ?? [];
 
+  /** Mentor action plan + description + signature — used for official ATR and leading the IQAC merged package. */
+  const appendMentorAnnex = (): void => {
+    if (iqacMergedChain) {
+      if (y > pageHeight - 85) {
+        doc.addPage();
+        y = 25;
+      } else {
+        y += 8;
+      }
+      doc.setDrawColor(...BORDER_COLOR);
+      doc.setLineWidth(0.35);
+      doc.line(ML, y - 2, MR, y - 2);
+      y += 10;
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...PRIMARY_COLOR);
+      doc.text("Mentor — Action Taken Report", ML, y);
+      y += 9;
+    }
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PRIMARY_COLOR);
+    doc.text("1. ACTION PLAN EXECUTED", ML, y);
+
+    const actionRows = actions.map((a, i) => [
+      { content: (i + 1).toString(), styles: { halign: "center" } },
+      a.issue,
+      { content: a.studentCount.toString(), styles: { halign: "center" } },
+      a.actionTaken,
+      a.timeline,
+      a.outcome,
+    ]);
+
+    autoTable(doc, {
+      startY: y + 4,
+      head: [["SL.", "ISSUE IDENTIFIED", "STU.", "ACTION TAKEN", "TIMELINE", "MEASURABLE OUTCOME"]],
+      body: actionRows,
+      theme: "grid",
+      styles: { fontSize: 7.5, cellPadding: 2.5, valign: "middle", overflow: "linebreak" },
+      headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 7.5 },
+      columnStyles: {
+        0: { cellWidth: 10, halign: "center" },
+        2: { cellWidth: 12, halign: "center" },
+        4: { cellWidth: 20, halign: "center" },
+        5: { cellWidth: 35 },
+      },
+      margin: { left: ML, right: 20 },
+    });
+
+    y = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable!.finalY + 10;
+    if (y > pageHeight - 55) {
+      doc.addPage();
+      y = 25;
+    }
+
+    const descText = report.description?.trim();
+    if (descText) {
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...PRIMARY_COLOR);
+      doc.text("2. REPORT DESCRIPTION", ML, y);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+      const splitDesc = doc.splitTextToSize(descText, MR - ML);
+      doc.text(splitDesc, ML, y + 5);
+      y += 5 + splitDesc.length * 4 + 8;
+    }
+
+    if (y > pageHeight - 45) {
+      doc.addPage();
+      y = 35;
+    } else {
+      y += 25;
+    }
+
+    const sigWidth = 55;
+    doc.setDrawColor(...SECONDARY_COLOR);
+    doc.setLineWidth(0.2);
+
+    const sigX = (pageWidth - sigWidth) / 2;
+    doc.line(sigX, y, sigX + sigWidth, y);
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text("MENTOR SIGNATURE", pageWidth / 2, y + 4, { align: "center" });
+    y += 22;
+  };
+
+  /** IQAC merged package only — space for IQAC and Principal ink signatures after Chief Mentor. */
+  const appendIqacPrincipalSignatureBlock = (): void => {
+    if (!iqacMergedChain) return;
+
+    if (y > pageHeight - 88) {
+      doc.addPage();
+      y = 25;
+    } else {
+      y += 12;
+    }
+
+    doc.setDrawColor(...BORDER_COLOR);
+    doc.setLineWidth(0.35);
+    doc.line(ML, y - 2, MR, y - 2);
+    y += 10;
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...PRIMARY_COLOR);
+    doc.text("IQAC / institutional completion", ML, y);
+    y += 8;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    doc.text(
+      "Print, sign, and stamp where required. Upload the scanned countersigned file in the portal to close the cycle.",
+      ML,
+      y,
+      { maxWidth: MR - ML },
+    );
+    y += 14;
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...SECONDARY_COLOR);
+    doc.text("IQAC / Quality Cell — signature & stamp", ML, y);
+    doc.setDrawColor(55, 65, 81);
+    doc.setLineWidth(0.25);
+    doc.line(ML, y + 14, ML + 78, y + 14);
+    y += 26;
+
+    doc.text("Principal — signature & stamp", ML, y);
+    doc.line(ML, y + 14, ML + 78, y + 14);
+    y += 28;
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7);
+    doc.setTextColor(110, 110, 110);
+    doc.text(`Date: ${format(new Date(), "PPP")}`, ML, y);
+    y += 8;
+  };
+
   /** HOD departmental checklist before annexed mentor submission. */
   const appendHodAuditFront = (): void => {
     if (!hodForFront) return;
 
-    if (y > pageHeight - 92) {
+    if (y > pageHeight - 120) {
       doc.addPage();
       y = 25;
     } else {
@@ -354,51 +598,99 @@ export async function generateAtrPdf(
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...PRIMARY_COLOR);
-    doc.text("HOD REVIEW CONFIRMATION", ML, y);
-    y += 8;
+    doc.text("1. HOD VALIDATION CHECKLIST", ML, y);
+    y += 7;
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...SECONDARY_COLOR);
-    doc.text("HEAD OF DEPARTMENT", ML, y);
-    doc.text("DEPARTMENT", pageWidth / 2, y, { align: "center" });
-    doc.text("REVIEWED ON", MR, y, { align: "right" });
+    doc.text("HOD NAME", ML, y);
+    doc.text("VALIDATION REF", MR, y, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(30, 41, 59);
+    const validationRef = String(report.id).toUpperCase();
+    doc.text(hodForFront.hodName, ML, y + 4);
+    doc.text(validationRef, MR, y + 4, { align: "right" });
+    y += 12;
 
     const validatedDisplay = hodForFront.validatedAt
       ? format(new Date(hodForFront.validatedAt), "PPP p")
       : format(new Date(), "PPP p");
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(30, 41, 59);
-    doc.text(hodForFront.hodName, ML, y + 5);
-    doc.text(hodForFront.hodDepartment, pageWidth / 2, y + 5, { align: "center", maxWidth: 70 });
-    doc.text(validatedDisplay, MR, y + 5, { align: "right" });
-    y += 14;
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 100, 100);
+    const metaBits = [
+      `Department: ${hodForFront.hodDepartment}`,
+      `Reviewed: ${validatedDisplay}`,
+      hodForFront.hodEmail ? `Email: ${hodForFront.hodEmail}` : null,
+    ].filter(Boolean) as string[];
+    doc.text(metaBits.join("  ·  "), ML, y, { maxWidth: MR - ML });
+    y += metaBits.length > 0 ? 7 : 4;
 
-    if (hodForFront.hodEmail) {
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", "italic");
-      doc.setTextColor(80, 80, 80);
-      doc.text(`Email / ID reference: ${hodForFront.hodEmail}`, ML, y);
-      y += 8;
-      doc.setFont("helvetica", "normal");
-    }
+    const hodCh = normalizeHodValidationChecklist(hodForFront.checklist);
+    const hodItems: [HodLineDecision, string][] = [
+      [hodCh.mentoringProcessEffective, "The mentoring process is effective."],
+      [hodCh.careerGuidanceMoreStructured, "Career guidance activities should be more structured."],
+      [hodCh.deptCareerProgramsIntegrated, "Department-level career development programs should be integrated."],
+    ];
+    const disagreeRgbHod: readonly [number, number, number] = [158, 158, 158];
+    const hodHeadBg: [number, number, number] = [29, 38, 54];
 
+    const hodTableBody = hodItems.map(([decision, label], i) => [
+      { content: String(i + 1), styles: { halign: "center" as const } },
+      label,
+      { content: "", styles: { halign: "center" as const } },
+    ]);
+
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["SL.", "VALIDATION CRITERIA", "RESULT"]],
+      body: hodTableBody,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 2.8, valign: "middle", overflow: "linebreak" },
+      headStyles: {
+        fillColor: hodHeadBg,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "center",
+        fontSize: 8,
+      },
+      columnStyles: {
+        0: { cellWidth: 12, halign: "center" },
+        2: { cellWidth: 26, halign: "center" },
+      },
+      margin: { left: ML, right: 20 },
+      didDrawCell: (data) => {
+        if (data.section !== "body" || data.column.index !== 2) return;
+        const idx = data.row.index;
+        const decision = hodItems[idx]![0];
+        const agreed = decision === "agreed";
+        const cell = data.cell;
+        const icon = 3.1;
+        const baselineY = cell.y + cell.height - 2.6;
+        const xLeft = cell.x + (cell.width - icon) / 2;
+        if (agreed) pdfDrawHodTick(doc, xLeft, baselineY, icon, PRIMARY_COLOR);
+        else pdfDrawHodCross(doc, xLeft, baselineY, icon, disagreeRgbHod);
+      },
+    });
+
+    const docLast = doc as unknown as { lastAutoTable?: { finalY: number } };
+    y = (docLast.lastAutoTable?.finalY ?? y) + 8;
+
+    const allAgreed = hodItems.every(([d]) => d === "agreed");
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59);
-    doc.text("Mandatory confirmation:", ML, y);
-    y += 6;
+    doc.setTextColor(...PRIMARY_COLOR);
+    doc.text("HOD VALIDATION SUMMARY", ML, y);
+    y += 5;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-
-    const mentoringOk = hodForFront.checklist.mentoringEffectiveAndCareerPrograms;
-    const label =
-      "The mentoring process is effective. More structured career development programs should be integrated at department level.";
-    if (mentoringOk) doc.setTextColor(...PRIMARY_COLOR);
-    else doc.setTextColor(158, 158, 158);
-    const wrapped = doc.splitTextToSize(`${mentoringOk ? "[X] " : "[ ] "}${label}`, MR - ML);
-    doc.text(wrapped, ML, y);
-    y += wrapped.length * 5 + 6;
+    doc.setTextColor(30, 41, 59);
+    const summaryLines = allAgreed
+      ? "Validation record certified based on institutional workflow completion."
+      : "Review completed with one or more criteria not affirmed; see checklist above and departmental remarks.";
+    const summarySplit = doc.splitTextToSize(summaryLines, MR - ML);
+    doc.text(summarySplit, ML, y);
+    y += summarySplit.length * 4 + 6;
 
     if (hodForFront.reviewRemarks?.trim()) {
       doc.setFontSize(8);
@@ -437,7 +729,7 @@ export async function generateAtrPdf(
   const appendChiefMentorAuditFront = (): void => {
     if (!chiefPdf) return;
 
-    if (y > pageHeight - 92) {
+    if (y > pageHeight - 120) {
       doc.addPage();
       y = 25;
     } else {
@@ -449,57 +741,70 @@ export async function generateAtrPdf(
     doc.line(ML, y - 2, MR, y - 2);
     y += 8;
 
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...PRIMARY_COLOR);
-    doc.text("CHIEF MENTOR REVIEW CONFIRMATION", ML, y);
-    y += 8;
-
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...SECONDARY_COLOR);
-    doc.text("CHIEF MENTOR", ML, y);
-    doc.text("AFFILIATION", pageWidth / 2, y, { align: "center" });
-    doc.text("REVIEWED ON", MR, y, { align: "right" });
-
     const validatedDisplay = chiefPdf.validatedAt
       ? format(new Date(chiefPdf.validatedAt), "PPP p")
       : format(new Date(), "PPP p");
+
+    /** Chief Mentor standalone / merged: identity row — name only (no checklist title, ref, or affiliation line). */
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...SECONDARY_COLOR);
+    doc.text("CHIEF MENTOR NAME", ML, y);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
     doc.setTextColor(30, 41, 59);
     doc.text(chiefPdf.chiefMentorName, ML, y + 5);
-    doc.text(chiefPdf.chiefMentorDepartment ?? "—", pageWidth / 2, y + 5, {
-      align: "center",
-      maxWidth: 70,
+    y += 13;
+
+    const chiefCh = normalizeChiefMentorValidationChecklist(chiefPdf.checklist);
+    const chiefItems: [HodLineDecision, string][] = [
+      [chiefCh.disciplineIssuesHandledWell, "Discipline issues have been handled well."],
+      [chiefCh.coordinationWithMentorsContinued, "Coordination with mentors should be continued."],
+      [chiefCh.sustainedEffortsBehaviorImprovement, "Sustained efforts are recommended for behavior improvement."],
+    ];
+    const disagreeRgbChief: readonly [number, number, number] = [158, 158, 158];
+    const chiefHeadBg: [number, number, number] = [29, 38, 54];
+
+    const chiefTableBody = chiefItems.map(([decision, label], i) => [
+      { content: String(i + 1), styles: { halign: "center" as const } },
+      label,
+      { content: "", styles: { halign: "center" as const } },
+    ]);
+
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["SL.", "VALIDATION CRITERIA", "RESULT"]],
+      body: chiefTableBody,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 2.8, valign: "middle", overflow: "linebreak" },
+      headStyles: {
+        fillColor: chiefHeadBg,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "center",
+        fontSize: 8,
+      },
+      columnStyles: {
+        0: { cellWidth: 12, halign: "center" },
+        2: { cellWidth: 26, halign: "center" },
+      },
+      margin: { left: ML, right: 20 },
+      didDrawCell: (data) => {
+        if (data.section !== "body" || data.column.index !== 2) return;
+        const idx = data.row.index;
+        const decision = chiefItems[idx]![0];
+        const agreed = decision === "agreed";
+        const cell = data.cell;
+        const icon = 3.1;
+        const baselineY = cell.y + cell.height - 2.6;
+        const xLeft = cell.x + (cell.width - icon) / 2;
+        if (agreed) pdfDrawHodTick(doc, xLeft, baselineY, icon, PRIMARY_COLOR);
+        else pdfDrawHodCross(doc, xLeft, baselineY, icon, disagreeRgbChief);
+      },
     });
-    doc.text(validatedDisplay, MR, y + 5, { align: "right" });
-    y += 14;
 
-    if (chiefPdf.chiefMentorEmail) {
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", "italic");
-      doc.setTextColor(80, 80, 80);
-      doc.text(`Email / ID reference: ${chiefPdf.chiefMentorEmail}`, ML, y);
-      y += 8;
-      doc.setFont("helvetica", "normal");
-    }
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59);
-    doc.text("Mandatory endorsement:", ML, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-
-    const endorsed = chiefPdf.checklist.endorsesInstitutionalProgression;
-    const label =
-      "This ATR aligns with institutional mentoring policy; I endorse progression to IQAC audit.";
-    if (endorsed) doc.setTextColor(...PRIMARY_COLOR);
-    else doc.setTextColor(158, 158, 158);
-    const wrapped = doc.splitTextToSize(`${endorsed ? "[X] " : "[ ] "}${label}`, MR - ML);
-    doc.text(wrapped, ML, y);
-    y += wrapped.length * 5 + 6;
+    const docChiefLast = doc as unknown as { lastAutoTable?: { finalY: number } };
+    y = (docChiefLast.lastAutoTable?.finalY ?? y) + 8;
 
     if (chiefPdf.reviewRemarks?.trim()) {
       doc.setFontSize(8);
@@ -574,24 +879,55 @@ export async function generateAtrPdf(
     doc.text("Mandatory confirmation checklist:", ML, y);
     y += 6;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-
-    const items: [boolean, string][] = [
-      [coordForFront.checklist.allParametersAddressed, "All parameters are properly addressed."],
-      [coordForFront.checklist.mentorProactive, "Mentor has taken proactive steps."],
-      [
-        coordForFront.checklist.continuousMonitoringSuggested,
-        "Suggested continuous monitoring for communication and career guidance.",
-      ],
+    const coordCh = normalizeCoordinatorValidationChecklist(coordForFront.checklist);
+    const coordItems: [HodLineDecision, string][] = [
+      [coordCh.allParametersAddressed, "All parameters are properly addressed."],
+      [coordCh.mentorProactive, "Mentor has taken proactive steps."],
+      [coordCh.continuousMonitoringSuggested, "Suggested continuous monitoring for communication and career guidance."],
     ];
-    for (const [ok, label] of items) {
-      if (ok) doc.setTextColor(...PRIMARY_COLOR);
-      else doc.setTextColor(158, 158, 158);
-      doc.text(`${ok ? "[X] " : "[ ] "}${label}`, ML, y);
-      y += 5;
-    }
-    y += 4;
+    const disagreeRgbCoord: readonly [number, number, number] = [158, 158, 158];
+    const coordHeadBg: [number, number, number] = [29, 38, 54];
+
+    const coordTableBody = coordItems.map(([decision, label], i) => [
+      { content: String(i + 1), styles: { halign: "center" as const } },
+      label,
+      { content: "", styles: { halign: "center" as const } },
+    ]);
+
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["SL.", "VALIDATION CRITERIA", "RESULT"]],
+      body: coordTableBody,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 2.8, valign: "middle", overflow: "linebreak" },
+      headStyles: {
+        fillColor: coordHeadBg,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "center",
+        fontSize: 8,
+      },
+      columnStyles: {
+        0: { cellWidth: 12, halign: "center" },
+        2: { cellWidth: 26, halign: "center" },
+      },
+      margin: { left: ML, right: 20 },
+      didDrawCell: (data) => {
+        if (data.section !== "body" || data.column.index !== 2) return;
+        const idx = data.row.index;
+        const decision = coordItems[idx]![0];
+        const agreed = decision === "agreed";
+        const cell = data.cell;
+        const icon = 3.1;
+        const baselineY = cell.y + cell.height - 2.6;
+        const xLeft = cell.x + (cell.width - icon) / 2;
+        if (agreed) pdfDrawHodTick(doc, xLeft, baselineY, icon, PRIMARY_COLOR);
+        else pdfDrawHodCross(doc, xLeft, baselineY, icon, disagreeRgbCoord);
+      },
+    });
+
+    const docCoordLast = doc as unknown as { lastAutoTable?: { finalY: number } };
+    y = (docCoordLast.lastAutoTable?.finalY ?? y) + 8;
 
     if (coordForFront.reviewRemarks?.trim()) {
       doc.setFontSize(8);
@@ -627,91 +963,28 @@ export async function generateAtrPdf(
     y += 22;
   };
 
-  /** Front matter: Chief Mentor → HOD → Coordinator, then annex. Skip coordinator on standalone HOD export. */
-  if (chiefPdf) appendChiefMentorAuditFront();
-  if (hodForFront) appendHodAuditFront();
+  /**
+   * IQAC merged: Mentor ATR first → Coordinator → HOD → Chief Mentor → IQAC/Principal sign-off.
+   * Official mentor-only PDF: annex content only when not coordinator/HOD/chief snapshot exports.
+   */
+  if (iqacMergedChain) {
+    appendMentorAnnex();
+  }
+
   const showCoordinatorFront =
-    !!coordForFront && (!!chiefPdf || (!hodPassed && !!coordPassed));
+    !!coordForFront &&
+    (iqacMergedChain || !!chiefPdf || (!hodPassed && !!coordPassed));
+
   if (showCoordinatorFront) appendCoordinatorAuditFront();
+  if (hodForFront) appendHodAuditFront();
+  if (chiefPdf) appendChiefMentorAuditFront();
 
-  // Mentor body (action plan + description + signature) — official mentor PDF only.
-  // Coordinator / HOD / Chief / IQAC merged exports end after institutional fronts above.
+  if (iqacMergedChain) {
+    appendIqacPrincipalSignatureBlock();
+  }
+
   if (!annexStyle) {
-    // ─────────────────────────────────────────────────────────────
-    // 1. ACTION PLAN EXECUTED
-    // ─────────────────────────────────────────────────────────────
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...PRIMARY_COLOR);
-    doc.text("1. ACTION PLAN EXECUTED", ML, y);
-
-    const actionRows = actions.map((a, i) => [
-      { content: (i + 1).toString(), styles: { halign: "center" } },
-      a.issue,
-      { content: a.studentCount.toString(), styles: { halign: "center" } },
-      a.actionTaken,
-      a.timeline,
-      a.outcome,
-    ]);
-
-    autoTable(doc, {
-      startY: y + 4,
-      head: [["SL.", "ISSUE IDENTIFIED", "STU.", "ACTION TAKEN", "TIMELINE", "MEASURABLE OUTCOME"]],
-      body: actionRows,
-      theme: "grid",
-      styles: { fontSize: 7.5, cellPadding: 2.5, valign: "middle", overflow: "linebreak" },
-      headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 7.5 },
-      columnStyles: {
-        0: { cellWidth: 10, halign: "center" },
-        2: { cellWidth: 12, halign: "center" },
-        4: { cellWidth: 20, halign: "center" },
-        5: { cellWidth: 35 },
-      },
-      margin: { left: ML, right: 20 },
-    });
-
-    // ─────────────────────────────────────────────────────────────
-    // 2. REPORT DESCRIPTION (optional)
-    // ─────────────────────────────────────────────────────────────
-    y = (doc as any).lastAutoTable.finalY + 10;
-    if (y > pageHeight - 55) {
-      doc.addPage();
-      y = 25;
-    }
-
-    const descText = report.description?.trim();
-    if (descText) {
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(...PRIMARY_COLOR);
-      doc.text("2. REPORT DESCRIPTION", ML, y);
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(30, 41, 59);
-      const splitDesc = doc.splitTextToSize(descText, MR - ML);
-      doc.text(splitDesc, ML, y + 5);
-      y += 5 + splitDesc.length * 4 + 8;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Mentor signature
-    // ─────────────────────────────────────────────────────────────
-    if (y > pageHeight - 45) {
-      doc.addPage();
-      y = 35;
-    } else {
-      y += 25;
-    }
-
-    const sigWidth = 55;
-    doc.setDrawColor(...SECONDARY_COLOR);
-    doc.setLineWidth(0.2);
-
-    const sigX = (pageWidth - sigWidth) / 2;
-    doc.line(sigX, y, sigX + sigWidth, y);
-    doc.setFontSize(7.5);
-    doc.setTextColor(30, 41, 59);
-    doc.text("MENTOR SIGNATURE", pageWidth / 2, y + 4, { align: "center" });
+    appendMentorAnnex();
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -735,6 +1008,8 @@ export async function generateAtrPdf(
     { align: "center" },
   );
   doc.text(`Page ${pdfPageCount(doc)}`, MR, footerY, { align: "right" });
+
+  applyMarginBorderAllPages(doc);
 
   doc.save(
     iqacMergedChain

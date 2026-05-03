@@ -38,7 +38,48 @@ import {
   type ActionItem,
   type AtrAttachment,
   type AtrReport,
+  type HodLineDecision,
 } from "@/lib/atr-types";
+
+type HodChecklistKey =
+  | "mentoringProcessEffective"
+  | "careerGuidanceMoreStructured"
+  | "deptCareerProgramsIntegrated";
+
+const HOD_STATEMENT_ROWS: { key: HodChecklistKey; label: string }[] = [
+  { key: "mentoringProcessEffective", label: "The mentoring process is effective." },
+  { key: "careerGuidanceMoreStructured", label: "Career guidance activities should be more structured." },
+  { key: "deptCareerProgramsIntegrated", label: "Department-level career development programs should be integrated." },
+];
+
+type ChiefChecklistKey =
+  | "disciplineIssuesHandledWell"
+  | "coordinationWithMentorsContinued"
+  | "sustainedEffortsBehaviorImprovement";
+
+const CHIEF_MENTOR_STATEMENT_ROWS: { key: ChiefChecklistKey; label: string }[] = [
+  { key: "disciplineIssuesHandledWell", label: "Discipline issues have been handled well." },
+  { key: "coordinationWithMentorsContinued", label: "Coordination with mentors should be continued." },
+  {
+    key: "sustainedEffortsBehaviorImprovement",
+    label: "Sustained efforts are recommended for behavior improvement.",
+  },
+];
+
+type CoordinatorChecklistKey =
+  | "allParametersAddressed"
+  | "mentorProactive"
+  | "continuousMonitoringSuggested";
+
+const COORDINATOR_STATEMENT_ROWS: { key: CoordinatorChecklistKey; label: string }[] = [
+  { key: "allParametersAddressed", label: "All parameters are properly addressed." },
+  { key: "mentorProactive", label: "Mentor has taken proactive steps." },
+  {
+    key: "continuousMonitoringSuggested",
+    label: "Suggested continuous monitoring for communication and career guidance.",
+  },
+];
+
 import { getAtrByIdFn } from "@/lib/auth-server";
 import { cn } from "@/lib/utils";
 
@@ -94,16 +135,28 @@ function AtrDetailPage() {
   const [remark, setRemark] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /** Coordinator Level-1 checks — required before approve + PDF issuance. */
-  const [coordAllParams, setCoordAllParams] = useState(false);
-  const [coordMentorProactive, setCoordMentorProactive] = useState(false);
-  const [coordContinuousMonitoring, setCoordContinuousMonitoring] = useState(false);
+  /** Coordinator per-line Agree / Disagree — same gating as HOD (all three answered; mix allowed). */
+  const [coordChecklist, setCoordChecklist] = useState<
+    Record<CoordinatorChecklistKey, HodLineDecision | null>
+  >({
+    allParametersAddressed: null,
+    mentorProactive: null,
+    continuousMonitoringSuggested: null,
+  });
 
-  /** HOD departmental confirmation — required before approve + PDF. */
-  const [hodDeptMentoringCheck, setHodDeptMentoringCheck] = useState(false);
+  /** HOD per-line Agree / Disagree — Approve after all three are answered (mix of tick/cross allowed). */
+  const [hodChecklist, setHodChecklist] = useState<Record<HodChecklistKey, HodLineDecision | null>>({
+    mentoringProcessEffective: null,
+    careerGuidanceMoreStructured: null,
+    deptCareerProgramsIntegrated: null,
+  });
 
-  /** Chief Mentor IQAC endorsement — required before approve + PDF. */
-  const [chiefEndorsesProgression, setChiefEndorsesProgression] = useState(false);
+  /** Chief Mentor — same: all three lines answered then Approve (any mix of Agree/Disagree). */
+  const [chiefChecklist, setChiefChecklist] = useState<Record<ChiefChecklistKey, HodLineDecision | null>>({
+    disciplineIssuesHandledWell: null,
+    coordinationWithMentorsContinued: null,
+    sustainedEffortsBehaviorImprovement: null,
+  });
 
   /** Read-only collapse (same UX idea as Create ATR). Key = action row id or index fallback. */
   const [collapsedActionKeys, setCollapsedActionKeys] = useState<Record<string, boolean>>({});
@@ -197,11 +250,19 @@ function AtrDetailPage() {
     user?.role === "admin" && report.status === "iqac_pending_scan";
 
   const coordinatorChecksComplete =
-    coordAllParams && coordMentorProactive && coordContinuousMonitoring;
+    coordChecklist.allParametersAddressed != null &&
+    coordChecklist.mentorProactive != null &&
+    coordChecklist.continuousMonitoringSuggested != null;
 
-  const hodChecksComplete = hodDeptMentoringCheck;
+  const hodChecksComplete =
+    hodChecklist.mentoringProcessEffective != null &&
+    hodChecklist.careerGuidanceMoreStructured != null &&
+    hodChecklist.deptCareerProgramsIntegrated != null;
 
-  const chiefMentorChecksComplete = chiefEndorsesProgression;
+  const chiefMentorChecksComplete =
+    chiefChecklist.disciplineIssuesHandledWell != null &&
+    chiefChecklist.coordinationWithMentorsContinued != null &&
+    chiefChecklist.sustainedEffortsBehaviorImprovement != null;
 
   const coordinatorValidationPayload =
     user && isCoordinatorReviewer && coordinatorChecksComplete
@@ -210,9 +271,9 @@ function AtrDetailPage() {
           coordinatorDepartment: user.department,
           coordinatorEmail: user.email,
           checklist: {
-            allParametersAddressed: coordAllParams,
-            mentorProactive: coordMentorProactive,
-            continuousMonitoringSuggested: coordContinuousMonitoring,
+            allParametersAddressed: coordChecklist.allParametersAddressed!,
+            mentorProactive: coordChecklist.mentorProactive!,
+            continuousMonitoringSuggested: coordChecklist.continuousMonitoringSuggested!,
           },
           reviewRemarks: remark.trim() || undefined,
         }
@@ -225,7 +286,9 @@ function AtrDetailPage() {
           hodDepartment: user.department,
           hodEmail: user.email,
           checklist: {
-            mentoringEffectiveAndCareerPrograms: hodDeptMentoringCheck,
+            mentoringProcessEffective: hodChecklist.mentoringProcessEffective!,
+            careerGuidanceMoreStructured: hodChecklist.careerGuidanceMoreStructured!,
+            deptCareerProgramsIntegrated: hodChecklist.deptCareerProgramsIntegrated!,
           },
           reviewRemarks: remark.trim() || undefined,
         }
@@ -238,7 +301,9 @@ function AtrDetailPage() {
           chiefMentorDepartment: user.department,
           chiefMentorEmail: user.email,
           checklist: {
-            endorsesInstitutionalProgression: chiefEndorsesProgression,
+            disciplineIssuesHandledWell: chiefChecklist.disciplineIssuesHandledWell!,
+            coordinationWithMentorsContinued: chiefChecklist.coordinationWithMentorsContinued!,
+            sustainedEffortsBehaviorImprovement: chiefChecklist.sustainedEffortsBehaviorImprovement!,
           },
           reviewRemarks: remark.trim() || undefined,
         }
@@ -251,7 +316,7 @@ function AtrDetailPage() {
         if (!audit) {
           toast.error("Coordinator validation PDF not available.", {
             description:
-              "If this ATR is still with you, check all three statements above first. Otherwise it may have been approved before validation snapshots were stored.",
+              "If this ATR is still with you, answer all three coordinator lines (Agree or Disagree) first. Otherwise it may have been approved before validation snapshots were stored.",
           });
           return;
         }
@@ -275,7 +340,7 @@ function AtrDetailPage() {
         if (!cmAudit) {
           toast.error("Chief Mentor review PDF not available.", {
             description:
-              "Confirm the IQAC endorsement below while this ATR is with Chief Mentor, or reopen after approval if the snapshot synced.",
+              "Complete the Chief Mentor checklist below while this ATR is with you, or reopen after approval if the snapshot synced.",
           });
           return;
         }
@@ -320,7 +385,7 @@ function AtrDetailPage() {
     if (action === "approve" && isCoordinatorReviewer && !coordinatorChecksComplete) {
       toast.error("Confirmation required before approval.", {
         description:
-          "Check all three validation statements confirming the mentor submission before you approve and forward.",
+          "For each of the three statements, choose Agree (tick) or Disagree (cross), then approve.",
         duration: 10_000,
       });
       return;
@@ -328,14 +393,15 @@ function AtrDetailPage() {
     if (action === "approve" && isHodReviewer && !hodChecksComplete) {
       toast.error("Confirmation required before approval.", {
         description:
-          "Confirm the HOD departmental statement on mentoring effectiveness and structured career-development programs.",
+          "For each of the three statements, choose Agree (tick) or Disagree (cross), then approve.",
         duration: 10_000,
       });
       return;
     }
     if (action === "approve" && isChiefMentorReviewer && !chiefMentorChecksComplete) {
       toast.error("Confirmation required before approval.", {
-        description: "Acknowledge the IQAC endorsement statement below before you approve and forward.",
+        description:
+          "For each of the three Chief Mentor lines, choose Agree (tick) or Disagree (cross), then approve.",
         duration: 10_000,
       });
       return;
@@ -376,9 +442,11 @@ function AtrDetailPage() {
             description: "Try Download PDF from this page, or regenerate from records.",
           });
         }
-        setCoordAllParams(false);
-        setCoordMentorProactive(false);
-        setCoordContinuousMonitoring(false);
+        setCoordChecklist({
+          allParametersAddressed: null,
+          mentorProactive: null,
+          continuousMonitoringSuggested: null,
+        });
       } else if (action === "approve" && isHodReviewer && hodChecksComplete) {
         const snapshot = getReport(report.id) ?? remoteReport ?? report;
         const hodForPdf: HodPdfAudit =
@@ -395,7 +463,11 @@ function AtrDetailPage() {
             description: "Try Download PDF from this page after refresh.",
           });
         }
-        setHodDeptMentoringCheck(false);
+        setHodChecklist({
+          mentoringProcessEffective: null,
+          careerGuidanceMoreStructured: null,
+          deptCareerProgramsIntegrated: null,
+        });
       } else if (action === "approve" && isChiefMentorReviewer && chiefMentorChecksComplete) {
         const snapshot = getReport(report.id) ?? remoteReport ?? report;
         const chiefForPdf: ChiefMentorPdfAudit =
@@ -412,7 +484,11 @@ function AtrDetailPage() {
             description: "Try Download PDF from this page after refresh.",
           });
         }
-        setChiefEndorsesProgression(false);
+        setChiefChecklist({
+          disciplineIssuesHandledWell: null,
+          coordinationWithMentorsContinued: null,
+          sustainedEffortsBehaviorImprovement: null,
+        });
       } else {
         toast.success(action === "approve" ? "Report approved and forwarded." : "Report rejected.");
       }
@@ -1159,11 +1235,11 @@ function AtrDetailPage() {
                   }
                   title={
                     isCoordinatorReviewer && !coordinatorChecksComplete
-                      ? "Confirm all three checklist items below before approving."
+                      ? "Answer all three coordinator lines (Agree or Disagree) before approving."
                       : isHodReviewer && !hodChecksComplete
-                        ? "Confirm the HOD departmental checklist below before approving."
+                        ? "Answer all three HOD lines (Agree or Disagree) before approving."
                         : isChiefMentorReviewer && !chiefMentorChecksComplete
-                          ? "Confirm the Chief Mentor IQAC endorsement below before approving."
+                          ? "Answer all three Chief Mentor lines (Agree or Disagree) before approving."
                           : undefined
                   }
                   className="px-8 py-3 rounded-2xl text-sm font-bold bg-growth text-growth-foreground hover:scale-105 active:scale-95 transition-all shadow-lg shadow-growth/20 flex items-center gap-2 disabled:opacity-40"
@@ -1180,38 +1256,61 @@ function AtrDetailPage() {
                   Coordinator confirmation
                 </legend>
                 <p className="text-xs text-muted-foreground -mt-1 mb-3">
-                  You must acknowledge each item below. Approved reports download a bundled PDF mirroring mentor ATR layout
-                  with your checklist and departmental details appended.
+                  For each line choose Agree (tick) or Disagree (cross). Your choices appear on the coordinator PDF.
+                  Approve when all three are answered — a cross on some lines does not block forward. Approved reports
+                  download a bundled PDF mirroring mentor ATR layout with your checklist and departmental details
+                  appended.
                 </p>
-                <label className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-secondary/40 cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={coordAllParams}
-                    onChange={(e) => setCoordAllParams(e.target.checked)}
-                    className="mt-1 size-4 shrink-0 rounded border-border text-growth accent-growth focus-visible:ring-2 focus-visible:ring-growth/40"
-                  />
-                  <span className="text-sm leading-snug text-foreground">All parameters are properly addressed.</span>
-                </label>
-                <label className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-secondary/40 cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={coordMentorProactive}
-                    onChange={(e) => setCoordMentorProactive(e.target.checked)}
-                    className="mt-1 size-4 shrink-0 rounded border-border text-growth accent-growth focus-visible:ring-2 focus-visible:ring-growth/40"
-                  />
-                  <span className="text-sm leading-snug text-foreground">Mentor has taken proactive steps.</span>
-                </label>
-                <label className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-secondary/40 cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={coordContinuousMonitoring}
-                    onChange={(e) => setCoordContinuousMonitoring(e.target.checked)}
-                    className="mt-1 size-4 shrink-0 rounded border-border text-growth accent-growth focus-visible:ring-2 focus-visible:ring-growth/40"
-                  />
-                  <span className="text-sm leading-snug text-foreground">
-                    Suggested continuous monitoring for communication and career guidance.
-                  </span>
-                </label>
+                <div className="space-y-3">
+                  {COORDINATOR_STATEMENT_ROWS.map(({ key, label }) => {
+                    const choice = coordChecklist[key];
+                    return (
+                      <div
+                        key={key}
+                        className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <p className="text-sm leading-snug text-foreground pr-2">{label}</p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            title="Agree"
+                            onClick={() =>
+                              setCoordChecklist((prev) => ({ ...prev, [key]: "agreed" }))
+                            }
+                            className={cn(
+                              "inline-flex size-10 items-center justify-center rounded-xl border transition-colors",
+                              choice === "agreed"
+                                ? "border-growth bg-growth/15 text-growth ring-2 ring-growth/35"
+                                : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                            )}
+                          >
+                            <CheckCircle className="size-5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            title="Disagree"
+                            onClick={() =>
+                              setCoordChecklist((prev) => ({ ...prev, [key]: "disagreed" }))
+                            }
+                            className={cn(
+                              "inline-flex size-10 items-center justify-center rounded-xl border transition-colors",
+                              choice === "disagreed"
+                                ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/30"
+                                : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                            )}
+                          >
+                            <XCircle className="size-5" aria-hidden />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {!coordinatorChecksComplete ? (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Choose Agree or Disagree on every line to enable Approve.
+                  </p>
+                ) : null}
               </fieldset>
             ) : null}
 
@@ -1221,21 +1320,59 @@ function AtrDetailPage() {
                   HOD confirmation
                 </legend>
                 <p className="text-xs text-muted-foreground -mt-1 mb-3">
-                  You must acknowledge the statement below. Approving forwards this ATR to the Chief Mentor and saves an
-                  HOD departmental review PDF for your records.
+                  For each line choose Agree (tick) or Disagree (cross). Your choices appear on the HOD PDF. Approve when
+                  all three are answered — a cross on some lines does not block forward.
                 </p>
-                <label className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-secondary/40 cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={hodDeptMentoringCheck}
-                    onChange={(e) => setHodDeptMentoringCheck(e.target.checked)}
-                    className="mt-1 size-4 shrink-0 rounded border-border text-growth accent-growth focus-visible:ring-2 focus-visible:ring-growth/40"
-                  />
-                  <span className="text-sm leading-snug text-foreground">
-                    The mentoring process is effective. More structured career development programs should be integrated
-                    at department level.
-                  </span>
-                </label>
+                <div className="space-y-3">
+                  {HOD_STATEMENT_ROWS.map(({ key, label }) => {
+                    const choice = hodChecklist[key];
+                    return (
+                      <div
+                        key={key}
+                        className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <p className="text-sm leading-snug text-foreground pr-2">{label}</p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            title="Agree"
+                            onClick={() =>
+                              setHodChecklist((prev) => ({ ...prev, [key]: "agreed" }))
+                            }
+                            className={cn(
+                              "inline-flex size-10 items-center justify-center rounded-xl border transition-colors",
+                              choice === "agreed"
+                                ? "border-growth bg-growth/15 text-growth ring-2 ring-growth/35"
+                                : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                            )}
+                          >
+                            <CheckCircle className="size-5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            title="Disagree"
+                            onClick={() =>
+                              setHodChecklist((prev) => ({ ...prev, [key]: "disagreed" }))
+                            }
+                            className={cn(
+                              "inline-flex size-10 items-center justify-center rounded-xl border transition-colors",
+                              choice === "disagreed"
+                                ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/30"
+                                : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                            )}
+                          >
+                            <XCircle className="size-5" aria-hidden />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {!hodChecksComplete ? (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Choose Agree or Disagree on every line to enable Approve.
+                  </p>
+                ) : null}
               </fieldset>
             ) : null}
 
@@ -1245,20 +1382,59 @@ function AtrDetailPage() {
                   Chief Mentor confirmation
                 </legend>
                 <p className="text-xs text-muted-foreground -mt-1 mb-3">
-                  You must acknowledge the statement below. Approving forwards this ATR to IQAC and saves a Chief Mentor
-                  review PDF for institutional records.
+                  For each line choose Agree (tick) or Disagree (cross). Your choices appear on the Chief Mentor PDF.
+                  Approve when all three are answered — crosses do not block forward.
                 </p>
-                <label className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-secondary/40 cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={chiefEndorsesProgression}
-                    onChange={(e) => setChiefEndorsesProgression(e.target.checked)}
-                    className="mt-1 size-4 shrink-0 rounded border-border text-growth accent-growth focus-visible:ring-2 focus-visible:ring-growth/40"
-                  />
-                  <span className="text-sm leading-snug text-foreground">
-                    This ATR aligns with institutional mentoring policy; I endorse progression to IQAC audit.
-                  </span>
-                </label>
+                <div className="space-y-3">
+                  {CHIEF_MENTOR_STATEMENT_ROWS.map(({ key, label }) => {
+                    const choice = chiefChecklist[key];
+                    return (
+                      <div
+                        key={key}
+                        className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <p className="text-sm leading-snug text-foreground pr-2">{label}</p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            title="Agree"
+                            onClick={() =>
+                              setChiefChecklist((prev) => ({ ...prev, [key]: "agreed" }))
+                            }
+                            className={cn(
+                              "inline-flex size-10 items-center justify-center rounded-xl border transition-colors",
+                              choice === "agreed"
+                                ? "border-growth bg-growth/15 text-growth ring-2 ring-growth/35"
+                                : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                            )}
+                          >
+                            <CheckCircle className="size-5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            title="Disagree"
+                            onClick={() =>
+                              setChiefChecklist((prev) => ({ ...prev, [key]: "disagreed" }))
+                            }
+                            className={cn(
+                              "inline-flex size-10 items-center justify-center rounded-xl border transition-colors",
+                              choice === "disagreed"
+                                ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/30"
+                                : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                            )}
+                          >
+                            <XCircle className="size-5" aria-hidden />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {!chiefMentorChecksComplete ? (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Choose Agree or Disagree on every line to enable Approve.
+                  </p>
+                ) : null}
               </fieldset>
             ) : null}
 

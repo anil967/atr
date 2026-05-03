@@ -37,18 +37,23 @@ function CoordinatorPage() {
   const [loadingMapping, setLoadingMapping] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      getMentorMappingsFn().then(mappings => {
-        const myMentors = (mappings || [])
-          .filter((m: any) => m.coordinator_id === user.id)
-          .map((m: any) => m.mentor_id);
+    if (!user) return;
+    getMentorMappingsFn()
+      .then((mappings) => {
+        const myMentors = (mappings ?? [])
+          .filter((m) => m.coordinatorId === user.id)
+          .map((m) => m.mentorId);
         setAssignedMentorIds(myMentors);
-      }).finally(() => setLoadingMapping(false));
-    }
+      })
+      .finally(() => setLoadingMapping(false));
   }, [user]);
 
-  // Filter reports: Must be in a relevant stage AND from an assigned mentor
-  const myReports = reports.filter(r => assignedMentorIds.includes(r.mentorId));
+  // Reports for this coordinator: mapping table + payload coordinatorId (set at mentor submit).
+  const myReports = reports.filter((r) => {
+    if (!user) return false;
+    if (r.coordinatorId === user.id) return true;
+    return assignedMentorIds.includes(r.mentorId);
+  });
   
   const inQueue = myReports.filter((r) =>
     r.status === "coordinator_review" || r.status === "submitted",

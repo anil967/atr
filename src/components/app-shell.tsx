@@ -57,9 +57,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
         return item;
       })
-      .filter(item => {
-        // Hide "My Group" for Chief Mentors
-        if (user.role === "chief_mentor" && item.to === "/team") return false;
+      .filter((item) => {
+        // "My Group" is mentor-only (student roster / Excel import).
+        if (item.to === "/team") return user.role === "mentor";
         return true;
       }),
   ];

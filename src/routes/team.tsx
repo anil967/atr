@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { getCurrentUser } from "@/lib/auth-store";
+import { getCurrentUser, getHomeRouteForRole } from "@/lib/auth-store";
 import { useStudents } from "@/lib/student-store";
 import { Upload, FileSpreadsheet, Plus, X, Users } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -9,8 +9,11 @@ import { useRef } from "react";
 
 export const Route = createFileRoute("/team")({
   beforeLoad: () => {
-    if (typeof window !== "undefined" && !getCurrentUser()) {
-      throw redirect({ to: "/login" });
+    if (typeof window === "undefined") return;
+    const user = getCurrentUser();
+    if (!user) throw redirect({ to: "/login" });
+    if (user.role !== "mentor") {
+      throw redirect({ to: getHomeRouteForRole(user.role) });
     }
   },
   head: () => ({
