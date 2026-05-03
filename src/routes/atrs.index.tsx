@@ -5,7 +5,7 @@ import { Search, PlusCircle } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { useReports } from "@/lib/atr-store";
-import { STATUS_LABELS, type AtrStatus } from "@/lib/atr-types";
+import { STATUS_LABELS, atrDisplayLabel, totalStudentsSummary, type AtrStatus } from "@/lib/atr-types";
 import { getCurrentUser, useCurrentUser } from "@/lib/auth-store";
 
 export const Route = createFileRoute("/atrs/")({
@@ -30,6 +30,7 @@ const STATUS_OPTIONS: (AtrStatus | "all")[] = [
   "hod_review",
   "chief_mentor_review",
   "iqac_review",
+  "iqac_pending_scan",
   "approved",
   "rejected",
 ];
@@ -46,7 +47,8 @@ function AtrListPage() {
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
       if (!q) return true;
       return (
-        r.title.toLowerCase().includes(q) ||
+        atrDisplayLabel(r).toLowerCase().includes(q) ||
+        (r.academicYear?.toLowerCase().includes(q) ?? false) ||
         r.id.toLowerCase().includes(q) ||
         r.department.toLowerCase().includes(q)
       );
@@ -123,11 +125,11 @@ function AtrListPage() {
                     <StatusBadge status={r.status} />
                   </div>
                   <h3 className="text-lg font-medium group-hover:text-growth transition-colors">
-                    {r.title}
+                    {atrDisplayLabel(r)}
                   </h3>
                   <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
                     <span>📅 {format(new Date(r.startDate), "MMM d, yyyy")}</span>
-                    <span>👥 {r.students.length} students</span>
+                    <span>👥 {totalStudentsSummary(r)} students</span>
                     <span>📂 {r.department}</span>
                     {r.coordinatorName && (
                       <span className="flex items-center gap-1.5">

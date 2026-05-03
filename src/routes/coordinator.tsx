@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import { atrDisplayLabel } from "@/lib/atr-types";
 import { getCurrentUser, getHomeRouteForRole } from "@/lib/auth-store";
 import { useReports } from "@/lib/atr-store";
 import { getMentorMappingsFn } from "@/lib/auth-server";
@@ -49,7 +50,9 @@ function CoordinatorPage() {
   // Filter reports: Must be in a relevant stage AND from an assigned mentor
   const myReports = reports.filter(r => assignedMentorIds.includes(r.mentorId));
   
-  const inQueue = myReports.filter((r) => r.status === "coordinator_review");
+  const inQueue = myReports.filter((r) =>
+    r.status === "coordinator_review" || r.status === "submitted",
+  );
   const escalated = myReports.filter((r) => r.status === "hod_review");
   const completed = myReports.filter((r) =>
     ["approved", "rejected"].includes(r.status),
@@ -102,7 +105,7 @@ function CoordinatorPage() {
                 className="flex items-center justify-between gap-4 px-6 py-4 hover:bg-secondary/30 transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{r.title}</p>
+                  <p className="font-medium text-sm truncate">{atrDisplayLabel(r)}</p>
                   <p className="text-xs text-muted-foreground">
                     {r.id} · {r.department}
                   </p>

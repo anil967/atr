@@ -5,7 +5,36 @@
 import { createServerFn } from "@tanstack/react-start";
 import * as bcrypt from "bcrypt-ts";
 import { getSupabase } from "./supabase";
-import type { Role, AtrStatus, AtrTimelineEntry } from "./atr-types";
+import { hodDepartmentMatches } from "./dept-scope";
+import { completedStageFromApproval } from "./atr-workflow";
+import type {
+  AtrAttachment,
+  AtrReport,
+  ChiefMentorValidationSnapshot,
+  CoordinatorValidationSnapshot,
+  HodValidationSnapshot,
+  Role,
+  AtrStatus,
+  AtrTimelineEntry,
+} from "./atr-types";
+
+/** Higher = further in the approval pipeline. Used to avoid reverting status with stale saves. */
+function atrWorkflowAdvanceRank(status: AtrStatus | string | undefined): number {
+  const order: AtrStatus[] = [
+    "draft",
+    "submitted",
+    "coordinator_review",
+    "hod_review",
+    "chief_mentor_review",
+    "iqac_review",
+    "iqac_pending_scan",
+    "approved",
+  ];
+  const i = order.indexOf(status as AtrStatus);
+  if (i >= 0) return i + 1;
+  if (status === "rejected") return 200;
+  return 0;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -270,41 +299,123 @@ export const getAtrsFn = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { user: AuthUser } }) => {
     const { user } = data;
     const sb = getSupabase();
-    
-    let query = sb.from("atrs").select("*");
 
-    if (user.role === "mentor") {
-      // Mentors only see their own ATRs
-      query = query.filter("payload->>mentorId", "eq", user.id);
-    } else if (user.role === "coordinator") {
-      // Coordinators only see assigned mentors' ATRs
+    if (user.role === "hod") {
+      const { data: rows, error } = await sb
+        .from("atrs")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) handleSupabaseError(error);
+      return (rows ?? [])
+        .filter((row) => {
+          const payload = row.payload as AtrReport | null | undefined;
+          return (
+            payload != null && hodDepartmentMatches(payload.department, user.department)
+          );
+        })
+        .map((row) => ({ ...(row.payload as object), id: row.id }));
+    }
+
+    if (user.role === "coordinator") {
       const { data: mappings } = await sb
         .from("mentor_mappings")
         .select("mentor_id")
         .eq("coordinator_id", user.id);
-      
-      const assignedMentorIds = (mappings ?? []).map(m => m.mentor_id);
-      if (assignedMentorIds.length === 0) return [];
-      
-      query = query.filter("payload->>mentorId", "in", `(${assignedMentorIds.join(',')})`);
-    } else if (user.role === "hod") {
-      // HODs see all ATRs from their department
-      query = query.filter("payload->>department", "eq", user.department);
+      const mentorIds = new Set((mappings ?? []).map((m) => m.mentor_id));
+      if (mentorIds.size === 0) return [];
+      const { data: rows, error } = await sb
+        .from("atrs")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) handleSupabaseError(error);
+      return (rows ?? [])
+        .filter((row) => {
+          const payload = row.payload as AtrReport | null | undefined;
+          return payload?.mentorId != null && mentorIds.has(payload.mentorId);
+        })
+        .map((row) => ({ ...(row.payload as object), id: row.id }));
+    }
+
+    let query = sb.from("atrs").select("*");
+
+    if (user.role === "mentor") {
+      query = query.filter("payload->>mentorId", "eq", user.id);
     }
     // Admin and Chief Mentor see all ATRs (no filter)
 
     const { data: rows, error } = await query.order("created_at", { ascending: false });
-    
+
     if (error) handleSupabaseError(error);
-    return (rows ?? []).map(row => ({ ...(row.payload as object), id: row.id }));
+    return (rows ?? []).map((row) => ({ ...(row.payload as object), id: row.id }));
   });
 
-export const saveAtrFn = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: any }) => {
+/** Full payload (includes attachment `dataUrl` when present). Local cache strips those to save quota. */
+export const getAtrByIdFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { user: AuthUser; atrId: string } }) => {
+    const { user, atrId } = data;
     const sb = getSupabase();
+    const { data: row, error } = await sb.from("atrs").select("*").eq("id", atrId).maybeSingle();
+    if (error) handleSupabaseError(error);
+    if (!row) return null;
+
+    const report = { ...(row.payload as object), id: row.id } as {
+      mentorId?: string;
+      department?: string;
+    };
+
+    const mentorId = report.mentorId;
+    const department = report.department;
+
+    if (user.role === "admin" || user.role === "chief_mentor") {
+      return report;
+    }
+    if (user.role === "mentor" && mentorId === user.id) {
+      return report;
+    }
+    if (user.role === "hod" && hodDepartmentMatches(department, user.department)) {
+      return report;
+    }
+    if (user.role === "coordinator") {
+      const { data: mappings } = await sb
+        .from("mentor_mappings")
+        .select("mentor_id")
+        .eq("coordinator_id", user.id);
+      const assignedMentorIds = (mappings ?? []).map((m) => m.mentor_id);
+      if (mentorId && assignedMentorIds.includes(mentorId)) {
+        return report;
+      }
+      return null;
+    }
+    return null;
+  },
+);
+
+export const saveAtrFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: AtrReport }) => {
+    const sb = getSupabase();
+    const clientPayload = data;
+
+    const { data: existingRow, error: fetchErr } = await sb
+      .from("atrs")
+      .select("payload")
+      .eq("id", clientPayload.id)
+      .maybeSingle();
+    if (fetchErr) handleSupabaseError(fetchErr);
+
+    if (existingRow?.payload) {
+      const serverPayload = existingRow.payload as AtrReport;
+      const sRank = atrWorkflowAdvanceRank(serverPayload.status);
+      const cRank = atrWorkflowAdvanceRank(clientPayload.status);
+      // Mentor createReport fires saveAtrFn async; if coordinator approves first, the DB is ahead —
+      // do not upsert the older "submitted" payload and wipe hod_review.
+      if (sRank > cRank) {
+        return { ok: true };
+      }
+    }
+
     const { error } = await sb.from("atrs").upsert({
-      id: data.id,
-      payload: data,
+      id: clientPayload.id,
+      payload: clientPayload,
       updated_at: new Date().toISOString(),
     });
     if (error) handleSupabaseError(error);
@@ -312,7 +423,21 @@ export const saveAtrFn = createServerFn({ method: "POST" })
   });
 
 export const reviewAtrFn = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { atrId: string; user: AuthUser; action: "approve" | "reject"; remark?: string } }) => {
+  .handler(
+    async ({
+      data,
+    }: {
+      data: {
+        atrId: string;
+        user: AuthUser;
+        action: "approve" | "reject" | "iqac_finalize";
+        remark?: string;
+        coordinatorValidation?: CoordinatorValidationSnapshot;
+        hodValidation?: HodValidationSnapshot;
+        chiefMentorValidation?: ChiefMentorValidationSnapshot;
+        iqacSignedScan?: AtrAttachment;
+      };
+    }) => {
     const { atrId, user, action, remark } = data;
     const sb = getSupabase();
 
@@ -325,35 +450,134 @@ export const reviewAtrFn = createServerFn({ method: "POST" })
 
     if (fetchError || !row) throw new Error("ATR not found");
     const report = row.payload as any;
-
-    // 2. Determine next status
-    let nextStatus: AtrStatus = report.status;
     const currentStatus = report.status as AtrStatus;
 
+    // IQAC terminal step: uploaded countersigned scan → approved (separate from first IQAC approve)
+    if (action === "iqac_finalize") {
+      if (user.role !== "admin") throw new Error("Only IQAC (admin) can finalize with a signed scan");
+      if (currentStatus !== "iqac_pending_scan") throw new Error("ATR is not awaiting the countersigned scan upload");
+      const scan = data.iqacSignedScan;
+      if (!scan?.name?.trim() || !scan.dataUrl?.trim()) {
+        throw new Error("Upload the scanned signed and stamped institutional package before submitting");
+      }
+
+      const nextStatus: AtrStatus = "approved";
+      const timelineStage = completedStageFromApproval("iqac_finalize", user.role, nextStatus);
+      const newEntry: AtrTimelineEntry = {
+        stage: timelineStage,
+        actor: user.name,
+        role: user.role,
+        remark: remark?.trim() || "Filed IQAC countersigned scan — ATR cycle complete.",
+        at: new Date().toISOString(),
+      };
+
+      const updatedReport = {
+        ...report,
+        status: nextStatus,
+        timeline: [...(report.timeline || []), newEntry],
+        iqacSignedScan: {
+          name: scan.name,
+          size: scan.size ?? 0,
+          type: scan.type || "application/pdf",
+          dataUrl: scan.dataUrl,
+        },
+      };
+
+      const { error: saveError } = await sb
+        .from("atrs")
+        .update({
+          payload: updatedReport,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", atrId);
+
+      if (saveError) handleSupabaseError(saveError);
+
+      return {
+        ok: true,
+        status: nextStatus,
+        coordinatorValidation: report.coordinatorValidation,
+        hodValidation: report.hodValidation,
+        chiefMentorValidation: report.chiefMentorValidation,
+        iqacSignedScan: updatedReport.iqacSignedScan,
+      };
+    }
+
+    // 2. Approve / reject (non-terminal IQAC paths)
+    let nextStatus: AtrStatus = report.status;
+
     if (action === "approve") {
-      if (currentStatus === "submitted") nextStatus = "coordinator_review";
-      else if (currentStatus === "coordinator_review") nextStatus = "hod_review";
-      else if (currentStatus === "hod_review") nextStatus = "chief_mentor_review";
+      // Mentor submit uses `submitted`; coordinator validates once — do not stall in an extra pseudo-step.
+      // `coordinator_review` kept for backwards compatibility with older payloads.
+      if (currentStatus === "submitted" || currentStatus === "coordinator_review") {
+        nextStatus = "hod_review";
+      } else if (currentStatus === "hod_review") nextStatus = "chief_mentor_review";
       else if (currentStatus === "chief_mentor_review") nextStatus = "iqac_review";
-      else if (currentStatus === "iqac_review") nextStatus = "approved";
+      else if (currentStatus === "iqac_review") nextStatus = "iqac_pending_scan";
     } else {
       nextStatus = "rejected";
     }
 
-    // 3. Update timeline
+    // 3. Update timeline — store the *completed* step (closing actor matches column), not inbox destination.
+    const timelineStage: AtrTimelineEntry["stage"] = completedStageFromApproval(
+      action,
+      user.role,
+      nextStatus,
+    );
+
     const newEntry: AtrTimelineEntry = {
-      stage: nextStatus,
+      stage: timelineStage,
       actor: user.name,
       role: user.role,
-      remark: remark || (action === "approve" ? "Approved and forwarded." : "Returned with concerns."),
+      remark:
+        remark || (action === "approve" ? "Approved and forwarded." : "Returned with concerns."),
       at: new Date().toISOString(),
     };
 
     const updatedTimeline = [...(report.timeline || []), newEntry];
+
+    const isCoordinatorForward =
+      action === "approve" &&
+      user.role === "coordinator" &&
+      (currentStatus === "submitted" || currentStatus === "coordinator_review");
+
+    const coordinatorValidationNext: CoordinatorValidationSnapshot | undefined =
+      isCoordinatorForward && data.coordinatorValidation
+        ? {
+            ...data.coordinatorValidation,
+            validatedAt: new Date().toISOString(),
+          }
+        : (report.coordinatorValidation as CoordinatorValidationSnapshot | undefined);
+
+    const isHodForward =
+      action === "approve" && user.role === "hod" && currentStatus === "hod_review";
+
+    const hodValidationNext: HodValidationSnapshot | undefined =
+      isHodForward && data.hodValidation
+        ? {
+            ...data.hodValidation,
+            validatedAt: new Date().toISOString(),
+          }
+        : (report.hodValidation as HodValidationSnapshot | undefined);
+
+    const isChiefMentorForward =
+      action === "approve" && user.role === "chief_mentor" && currentStatus === "chief_mentor_review";
+
+    const chiefMentorValidationNext: ChiefMentorValidationSnapshot | undefined =
+      isChiefMentorForward && data.chiefMentorValidation
+        ? {
+            ...data.chiefMentorValidation,
+            validatedAt: new Date().toISOString(),
+          }
+        : (report.chiefMentorValidation as ChiefMentorValidationSnapshot | undefined);
+
     const updatedReport = {
       ...report,
       status: nextStatus,
       timeline: updatedTimeline,
+      ...(coordinatorValidationNext !== undefined ? { coordinatorValidation: coordinatorValidationNext } : {}),
+      ...(hodValidationNext !== undefined ? { hodValidation: hodValidationNext } : {}),
+      ...(chiefMentorValidationNext !== undefined ? { chiefMentorValidation: chiefMentorValidationNext } : {}),
     };
 
     // 4. Save
@@ -366,8 +590,15 @@ export const reviewAtrFn = createServerFn({ method: "POST" })
       .eq("id", atrId);
 
     if (saveError) handleSupabaseError(saveError);
-    return { ok: true, status: nextStatus };
-  });
+    return {
+      ok: true,
+      status: nextStatus,
+      coordinatorValidation: coordinatorValidationNext,
+      hodValidation: hodValidationNext,
+      chiefMentorValidation: chiefMentorValidationNext,
+    };
+  },
+  );
 
 export const deleteAllAtrsFn = createServerFn({ method: "POST" })
   .handler(async () => {

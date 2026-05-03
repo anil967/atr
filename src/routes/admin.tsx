@@ -4,6 +4,7 @@ import { StatCard } from "@/components/stat-card";
 import { ChevronRight } from "lucide-react";
 import { getCurrentUser, getHomeRouteForRole } from "@/lib/auth-store";
 import { useReports } from "@/lib/atr-store";
+import { atrDisplayLabel } from "@/lib/atr-types";
 
 export const Route = createFileRoute("/admin")({
   beforeLoad: () => {
@@ -31,7 +32,9 @@ function AdminPage() {
   const inProgress = reports.filter((r) =>
     ["coordinator_review", "hod_review", "chief_mentor_review"].includes(r.status),
   ).length;
-  const pendingAudit = reports.filter((r) => r.status === "iqac_review");
+  const pendingAudit = reports.filter((r) =>
+    ["iqac_review", "iqac_pending_scan"].includes(r.status),
+  );
   const approved = reports.filter((r) => r.status === "approved").length;
   const rejected = reports.filter((r) => r.status === "rejected").length;
 
@@ -83,7 +86,7 @@ function AdminPage() {
                   className="flex items-center justify-between gap-4 px-6 py-5 hover:bg-secondary/30 transition-colors group"
                 >
                   <div>
-                    <p className="font-medium text-sm group-hover:text-growth transition-colors">{r.title}</p>
+                    <p className="font-medium text-sm group-hover:text-growth transition-colors">{atrDisplayLabel(r)}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[10px] font-mono text-muted-foreground">{r.id}</span>
                       <span className="size-1 rounded-full bg-border" />

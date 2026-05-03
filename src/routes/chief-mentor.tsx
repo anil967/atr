@@ -5,6 +5,7 @@ import { Users, Check, AlertCircle, Save, Search, LayoutDashboard, UserPlus, Fil
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import { atrDisplayLabel } from "@/lib/atr-types";
 import { getCurrentUser, getHomeRouteForRole } from "@/lib/auth-store";
 import { useReports } from "@/lib/atr-store";
 import { getAllUsersByRoleFn, deleteAllAtrsFn } from "@/lib/auth-server";
@@ -55,7 +56,7 @@ function ApprovalQueue() {
             className="flex items-center justify-between gap-4 px-6 py-5 hover:bg-secondary/30 transition-colors group"
           >
             <div className="min-w-0">
-              <p className="font-medium text-sm group-hover:text-growth transition-colors">{r.title}</p>
+              <p className="font-medium text-sm group-hover:text-growth transition-colors">{atrDisplayLabel(r)}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px] font-mono text-muted-foreground">{r.id}</span>
                 <span className="size-1 rounded-full bg-border" />

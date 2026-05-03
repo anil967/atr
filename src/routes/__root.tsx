@@ -1,6 +1,7 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { useState } from "react";
 import SplashScreen from "@/components/splash-screen";
+import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
 
@@ -109,6 +110,7 @@ function RootComponent() {
         }}
       >
         <Outlet />
+        <Toaster position="bottom-center" richColors closeButton duration={5000} />
       </div>
     </>
   );

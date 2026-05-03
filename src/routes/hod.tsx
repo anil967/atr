@@ -3,8 +3,10 @@ import { format } from "date-fns";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import { atrDisplayLabel } from "@/lib/atr-types";
 import { getCurrentUser, getHomeRouteForRole } from "@/lib/auth-store";
 import { useReports } from "@/lib/atr-store";
+import { hodDepartmentMatches } from "@/lib/dept-scope";
 
 export const Route = createFileRoute("/hod")({
   beforeLoad: () => {
@@ -30,8 +32,10 @@ function HodPage() {
   const user = getCurrentUser();
   const reports = useReports();
   
-  // Filter reports: Must be in a relevant stage AND from the HOD's department
-  const myDeptReports = reports.filter(r => r.department === user?.department);
+  // Same department bucket as server (e.g. HOD profile "CSE" vs ATR payload "Computer Science").
+  const myDeptReports = reports.filter((r) =>
+    hodDepartmentMatches(r.department, user?.department),
+  );
   
   const reviewItems = myDeptReports.filter((r) => r.status === "hod_review");
   const escalated = myDeptReports.filter((r) => r.status === "chief_mentor_review");
@@ -67,7 +71,7 @@ function HodPage() {
                 className="flex items-center justify-between gap-4 px-6 py-4 hover:bg-secondary/30 transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{r.title}</p>
+                  <p className="font-medium text-sm truncate">{atrDisplayLabel(r)}</p>
                   <p className="text-xs text-muted-foreground">
                     {r.id} · {r.department} · {format(new Date(r.createdAt), "MMM d, yyyy")}
                   </p>

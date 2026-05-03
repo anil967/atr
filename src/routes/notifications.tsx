@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { Bell } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useReports } from "@/lib/atr-store";
-import { STATUS_LABELS } from "@/lib/atr-types";
+import { STATUS_LABELS, atrDisplayLabel } from "@/lib/atr-types";
 import { getCurrentUser } from "@/lib/auth-store";
 
 export const Route = createFileRoute("/notifications")({
@@ -25,7 +25,7 @@ function NotificationsPage() {
   const reports = useReports();
   const events = reports
     .flatMap((r) =>
-      r.timeline.map((t) => ({ ...t, reportId: r.id, reportTitle: r.title }))
+      r.timeline.map((t) => ({ ...t, reportId: r.id, reportTitle: atrDisplayLabel(r) }))
     )
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .slice(0, 25);

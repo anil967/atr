@@ -1,0 +1,57 @@
+/** Trim + lowercase for comparisons. */
+export function deptNormalize(dept: string | undefined): string {
+  return (dept ?? "").trim().toLowerCase();
+}
+
+/**
+ * Maps mentor-facing department labels ↔ HOD profile labels within the same school.
+ * e.g. ATR payloads say "Computer Science" while signup uses "CSE".
+ */
+const ALIAS_TO_BUCKET: Record<string, string> = (() => {
+  const pairs: [string, string][] = [];
+
+  /** Register every spelling variant onto the same bucket id. */
+  const bucket = (id: string, labels: string[]) => {
+    for (const lbl of labels) {
+      pairs.push([deptNormalize(lbl), id]);
+    }
+  };
+
+  bucket("branch_csc", ["CSE", "CS", "Computer Science", "Computer-Science"]);
+
+  bucket("branch_ece", ["ECE", "Electronics", "Electronics & Communication"]);
+
+  bucket("branch_eee", ["EEE", "Electrical", "Electrical Engineering"]);
+
+  bucket("branch_mech", ["ME", "MECH", "Mechanical", "Mechanical Engineering"]);
+
+  bucket("branch_civil", ["CE", "Civil", "Civil Engineering"]);
+
+  bucket("branch_mca", ["MCA"]);
+
+  bucket("branch_mba", ["MBA"]);
+
+  bucket("branch_chemical", ["Chemical", "Chemical Engineering"]);
+
+  bucket("branch_it", ["IT", "Information Technology"]);
+
+  const m: Record<string, string> = {};
+  for (const [alias, bucketId] of pairs) {
+    m[alias] = bucketId;
+  }
+  return m;
+})();
+
+/**
+ * Whether an HOD user may scope an ATR for their departmental queue/detail access.
+ */
+export function hodDepartmentMatches(reportDept: string | undefined, hodDept: string | undefined): boolean {
+  const r = deptNormalize(reportDept);
+  const h = deptNormalize(hodDept);
+  if (!r || !h) return false;
+  if (r === h) return true;
+
+  const br = ALIAS_TO_BUCKET[r];
+  const bh = ALIAS_TO_BUCKET[h];
+  return br !== undefined && bh !== undefined && br === bh;
+}

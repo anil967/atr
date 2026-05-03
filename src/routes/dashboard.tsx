@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { ApprovalTimeline } from "@/components/approval-timeline";
+import { atrDisplayLabel } from "@/lib/atr-types";
 import { getCurrentUser } from "@/lib/auth-store";
 import { useReports } from "@/lib/atr-store";
 
@@ -92,7 +93,7 @@ function DashboardPage() {
                       Reference
                     </th>
                     <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                      Title
+                      Academic year
                     </th>
                     <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
                       Status
@@ -110,7 +111,7 @@ function DashboardPage() {
                         {r.id}
                       </td>
                       <td className="px-6 py-4">
-                        <p className="font-medium text-sm">{r.title}</p>
+                        <p className="font-medium text-sm">{atrDisplayLabel(r)}</p>
                         <p className="text-[11px] text-muted-foreground">{r.department}</p>
                       </td>
                       <td className="px-6 py-4">
@@ -149,7 +150,10 @@ function DashboardPage() {
 
           <aside>
             {activeReport ? (
-              <ApprovalTimeline timeline={activeReport.timeline} />
+              <ApprovalTimeline
+                timeline={activeReport.timeline}
+                currentStatus={activeReport.status}
+              />
             ) : (
               <div className="bg-growth text-growth-foreground rounded-3xl p-8 shadow-architectural">
                 <h3 className="text-lg font-medium">No active reviews</h3>
