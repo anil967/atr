@@ -342,11 +342,20 @@ export function atrDisplayLabel(r: AtrReport): string {
 }
 
 /**
- * Headline student count for lists/summary: max of parsed beneficiary rows vs sum of per-issue
- * {@link ActionItem.studentCount} (mentors often fill framework counts without a beneficiary table).
+ * Headline student count for lists/summary: sum of students attached to each action row (tags or
+ * legacy `studentCount`). If that sum is zero, falls back to mentor roster length on the report
+ * (older ATRs that only carried the beneficiary table).
  */
 export function totalStudentsSummary(r: AtrReport): number {
   const listLen = r.students?.length ?? 0;
   const fromActions = (r.actions ?? []).reduce((sum, a) => sum + actionItemEffectiveStudentCount(a), 0);
-  return Math.max(listLen, fromActions);
+  if (fromActions > 0) return fromActions;
+  return listLen;
+}
+
+/** Report-level uploads plus every file under each issue’s supporting evidence. */
+export function totalAtrStoredFiles(r: AtrReport): number {
+  const top = r.attachments?.length ?? 0;
+  const perIssue = (r.actions ?? []).reduce((sum, a) => sum + (a.evidenceFiles?.length ?? 0), 0);
+  return top + perIssue;
 }

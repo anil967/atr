@@ -35,12 +35,22 @@ import { Loader2, CheckCircle, XCircle, MessageSquare } from "lucide-react";
 import {
   actionItemEffectiveStudentCount,
   atrDisplayLabel,
+  totalAtrStoredFiles,
   totalStudentsSummary,
   type ActionItem,
   type AtrAttachment,
   type AtrReport,
   type HodLineDecision,
+  type ParsedStudent,
+  type TaggedMentee,
 } from "@/lib/atr-types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type HodChecklistKey =
   | "mentoringProcessEffective"
@@ -83,6 +93,82 @@ const COORDINATOR_STATEMENT_ROWS: { key: CoordinatorChecklistKey; label: string 
 
 import { getAtrByIdFn } from "@/lib/auth-server";
 import { cn } from "@/lib/utils";
+
+function normalizeRollNo(r: string | undefined): string {
+  return (r ?? "").trim().toLowerCase();
+}
+
+/** Merge tag with mentor roster on the ATR so the dialog can show full ParsedStudent fields when rolls match. */
+function resolveTaggedStudentForDetail(tag: TaggedMentee, roster: ParsedStudent[] | undefined): ParsedStudent {
+  const key = normalizeRollNo(tag.rollNo);
+  const fromRoster = roster?.find((s) => normalizeRollNo(s.rollNo) === key);
+  if (fromRoster) {
+    return {
+      ...fromRoster,
+      name: (tag.name ?? "").trim() || fromRoster.name,
+      rollNo: (tag.rollNo ?? "").trim() || fromRoster.rollNo,
+    };
+  }
+  return {
+    name: (tag.name ?? "").trim() || "—",
+    rollNo: (tag.rollNo ?? "").trim() || "—",
+  };
+}
+
+function StudentDetailFields({ s }: { s: ParsedStudent }) {
+  const rows: { label: string; value: string | undefined }[] = [
+    { label: "Name", value: s.name },
+    { label: "Roll no", value: s.rollNo },
+    { label: "Registration no", value: s.regNo },
+    { label: "Semester", value: s.semester },
+    { label: "Branch", value: s.branch ?? s.department },
+    { label: "Year", value: s.year },
+    { label: "Father's name", value: s.fatherName },
+    { label: "Student contact", value: s.contactNumber },
+    { label: "Parent contact", value: s.parentContactNumber },
+    { label: "Email", value: s.email },
+  ];
+  const hasAddress = Boolean(s.address?.trim());
+  const hasExtended =
+    Boolean(
+      s.regNo?.trim() ||
+        s.semester?.trim() ||
+        s.branch?.trim() ||
+        s.department?.trim() ||
+        s.year?.trim() ||
+        s.fatherName?.trim() ||
+        s.contactNumber?.trim() ||
+        s.parentContactNumber?.trim() ||
+        s.email?.trim(),
+    ) || hasAddress;
+  return (
+    <div className="space-y-4 text-sm">
+      <dl className="grid grid-cols-[minmax(0,118px)_1fr] gap-x-3 gap-y-2.5">
+        {rows.map(({ label, value }) =>
+          value != null && String(value).trim() ? (
+            <div key={label} className="contents">
+              <dt className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground pt-0.5">{label}</dt>
+              <dd className="text-foreground break-words">{String(value).trim()}</dd>
+            </div>
+          ) : null,
+        )}
+      </dl>
+      {hasAddress ? (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Address</p>
+          <p className="text-foreground whitespace-pre-wrap break-words leading-relaxed">{s.address!.trim()}</p>
+        </div>
+      ) : null}
+      {!hasExtended ? (
+        <p className="text-xs text-muted-foreground border-t border-border/60 pt-3 mt-1 leading-relaxed">
+          This ATR snapshot only has name and roll for this mentee. When the report was built with a full{" "}
+          <span className="font-medium text-foreground">My mentee</span> roster, semester, contacts, and address appear
+          here automatically.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function actionRowReviewPct(action: ActionItem) {
   let n = 0;
@@ -167,6 +253,8 @@ function AtrDetailPage() {
     mime: string;
     url: string;
   } | null>(null);
+  /** Parsed mentee row for dialog — merged from issue tag + report roster when rolls match. */
+  const [studentDetail, setStudentDetail] = useState<ParsedStudent | null>(null);
   const attachmentBlobUrlRef = useRef<string | null>(null);
   const iqacScanInputRef = useRef<HTMLInputElement>(null);
 
@@ -224,6 +312,18 @@ function AtrDetailPage() {
   }, []);
 
   const report = remoteReport ?? localReport ?? undefined;
+
+  const issueEvidenceForGallery = useMemo(
+    () =>
+      (report?.actions ?? []).flatMap((action, actionIdx) =>
+        (action.evidenceFiles ?? []).map((file, fileIdx) => ({
+          file,
+          issueIndex: actionIdx + 1,
+          key: `ev-${action.id ?? actionIdx}-${fileIdx}-${file.name}`,
+        })),
+      ),
+    [report?.actions],
+  );
 
   if (!report) throw notFound();
 
@@ -672,6 +772,27 @@ function AtrDetailPage() {
           </div>
         </div>
       ) : null}
+
+      <Dialog
+        open={studentDetail != null}
+        onOpenChange={(open) => {
+          if (!open) setStudentDetail(null);
+        }}
+      >
+        <DialogContent className="max-w-md sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border-growth/15">
+          <DialogHeader>
+            <DialogTitle>Student details</DialogTitle>
+            {studentDetail ? (
+              <DialogDescription>
+                Roll <span className="font-mono text-foreground">{studentDetail.rollNo}</span> — snapshot from this ATR’s
+                mentee roster when available.
+              </DialogDescription>
+            ) : null}
+          </DialogHeader>
+          {studentDetail ? <StudentDetailFields s={studentDetail} /> : null}
+        </DialogContent>
+      </Dialog>
+
       <div className="p-6 lg:p-12 max-w-[1400px] mx-auto space-y-8">
         <Link
           to="/atrs"
@@ -870,7 +991,7 @@ function AtrDetailPage() {
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
                   Attachments
                 </p>
-                <p className="text-sm font-medium mt-1">{report.attachments.length}</p>
+                <p className="text-sm font-medium mt-1">{totalAtrStoredFiles(report)}</p>
               </div>
             </section>
 
@@ -1002,13 +1123,25 @@ function AtrDetailPage() {
                                     Students
                                   </p>
                                   {row.taggedStudents && row.taggedStudents.length > 0 ? (
-                                    <ul className="text-sm space-y-1.5">
+                                    <ul className="text-sm space-y-1">
                                       {row.taggedStudents.map((t) => (
                                         <li key={t.rollNo} className="leading-snug">
-                                          <span className="font-medium text-foreground">{t.name}</span>
-                                          <span className="text-muted-foreground font-mono text-xs ml-2">
-                                            {t.rollNo}
-                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setStudentDetail(
+                                                resolveTaggedStudentForDetail(t, report.students),
+                                              )
+                                            }
+                                            className="w-full text-left rounded-xl px-2 py-1.5 -mx-2 hover:bg-growth/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-growth/35 transition-colors group/stu"
+                                          >
+                                            <span className="font-medium text-foreground group-hover/stu:text-growth group-hover/stu:underline underline-offset-2">
+                                              {t.name}
+                                            </span>
+                                            <span className="text-muted-foreground font-mono text-xs ml-2">
+                                              {t.rollNo}
+                                            </span>
+                                          </button>
                                         </li>
                                       ))}
                                     </ul>
@@ -1161,8 +1294,8 @@ function AtrDetailPage() {
               </div>
             </section>
 
-            {/* Attachments */}
-            {report.attachments.length > 0 ? (
+            {/* Attachments + per-issue supporting evidence (same total as summary “Attachments”) */}
+            {totalAtrStoredFiles(report) > 0 ? (
               <section className="bg-surface rounded-3xl border border-border/60 shadow-card p-7">
                 <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground mb-4">
                   Attachments
@@ -1183,9 +1316,37 @@ function AtrDetailPage() {
                         </div>
                       )}
                       <div className="p-2.5 bg-surface">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-growth/90 mb-0.5">
+                          Report
+                        </p>
                         <p className="text-[11px] font-medium truncate">{a.name}</p>
                         <p className="text-[10px] text-muted-foreground">
                           {(a.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                  {issueEvidenceForGallery.map(({ file, issueIndex, key }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleOpenAttachment(file)}
+                      className="text-left rounded-xl border border-border overflow-hidden bg-secondary/30 hover:border-growth/50 hover:bg-secondary/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
+                    >
+                      {file.dataUrl ? (
+                        <img src={file.dataUrl} alt="" className="w-full h-32 object-cover pointer-events-none" />
+                      ) : (
+                        <div className="w-full h-32 flex items-center justify-center text-muted-foreground">
+                          <Paperclip className="size-8" />
+                        </div>
+                      )}
+                      <div className="p-2.5 bg-surface">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-growth/90 mb-0.5">
+                          Issue #{issueIndex}
+                        </p>
+                        <p className="text-[11px] font-medium truncate">{file.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {(file.size / 1024).toFixed(1)} KB
                         </p>
                       </div>
                     </button>
