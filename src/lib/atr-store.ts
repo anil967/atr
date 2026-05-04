@@ -9,7 +9,7 @@ import type {
 } from "./atr-types";
 import type { AuthUser } from "./auth-store";
 import { getCurrentUser } from "./auth-store";
-import { hodDepartmentMatches } from "./dept-scope";
+import { departmentReferenceCode, hodDepartmentMatches } from "./dept-scope";
 import { getAtrsFn, saveAtrFn, deleteAllAtrsFn, getMentorMappingsFn, reviewAtrFn } from "./auth-server";
 import { completedStageFromApproval } from "./atr-workflow";
 
@@ -230,9 +230,10 @@ export async function createReport(input: Omit<AtrReport, "id" | "status" | "tim
     }
   }
   const year = new Date().getFullYear();
-  const dept = input.department.toLowerCase();
-  const count = items.filter(r => r.department.toLowerCase() === dept).length + 1;
-  const id = `bcet${year}${dept}-${String(count).padStart(2, "0")}`;
+  const deptSeg = departmentReferenceCode(input.department).toLowerCase();
+  const count =
+    items.filter((r) => departmentReferenceCode(r.department).toLowerCase() === deptSeg).length + 1;
+  const id = `bcet${year}${deptSeg}-${String(count).padStart(2, "0")}`;
   const nowIso = new Date().toISOString();
 
   // Lookup assigned coordinator

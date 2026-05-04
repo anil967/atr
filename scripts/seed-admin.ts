@@ -1,5 +1,6 @@
 /**
- * One-time seed script — creates all system users in MongoDB Atlas.
+ * Legacy MongoDB seed — not used by the current app (auth + data are Supabase).
+ * Prefer: `npm run seed` → scripts/seed-supabase-users.ts
  *
  * Run with:
  *   npx tsx --env-file=.env.local scripts/seed-admin.ts
@@ -94,7 +95,7 @@ async function main() {
   console.log("👤  Seeding users…\n");
 
   for (const u of USERS) {
-    const passwordHash = await bcrypt.hash(u.password, 12);
+    const password_hash = await bcrypt.hash(u.password, 12);
 
     const result = await col.updateOne(
       { email: u.email },
@@ -102,7 +103,7 @@ async function main() {
         $set: {
           name: u.name,
           email: u.email,
-          passwordHash,
+          password_hash,
           role: u.role,
           department: u.department,
           disabled: false,

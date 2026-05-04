@@ -33,6 +33,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, CheckCircle, XCircle, MessageSquare } from "lucide-react";
 import {
+  actionItemEffectiveStudentCount,
   atrDisplayLabel,
   totalStudentsSummary,
   type ActionItem,
@@ -86,8 +87,7 @@ import { cn } from "@/lib/utils";
 function actionRowReviewPct(action: ActionItem) {
   let n = 0;
   if (String(action.issue ?? "").trim()) n++;
-  const sc = Number(action.studentCount ?? 0);
-  if (!Number.isNaN(sc) && sc > 0) n++;
+  if (actionItemEffectiveStudentCount(action) > 0) n++;
   if (String(action.actionTaken ?? "").trim()) n++;
   if (String(action.timeline ?? "").trim()) n++;
   if (String(action.outcome ?? "").trim()) n++;
@@ -999,9 +999,24 @@ function AtrDetailPage() {
                                 <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3">
                                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
                                     <Users className="size-3.5 text-growth/80" aria-hidden />
-                                    No. of students
+                                    Students
                                   </p>
-                                  <p className="text-lg font-bold tabular-nums text-foreground">{row.studentCount}</p>
+                                  {row.taggedStudents && row.taggedStudents.length > 0 ? (
+                                    <ul className="text-sm space-y-1.5">
+                                      {row.taggedStudents.map((t) => (
+                                        <li key={t.rollNo} className="leading-snug">
+                                          <span className="font-medium text-foreground">{t.name}</span>
+                                          <span className="text-muted-foreground font-mono text-xs ml-2">
+                                            {t.rollNo}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-lg font-bold tabular-nums text-foreground">
+                                      {row.studentCount}
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3">
                                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
@@ -1094,38 +1109,56 @@ function AtrDetailPage() {
                   Attending students
                 </h2>
               </div>
-              <table className="w-full text-left text-sm">
-                <thead className="bg-secondary/40">
-                  <tr>
-                    <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      #
-                    </th>
-                    <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Name
-                    </th>
-                    <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Roll No
-                    </th>
-                    <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Department
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {report.students.map((s, i) => (
-                    <tr key={`${s.rollNo}-${i}`}>
-                      <td className="px-7 py-3 text-xs text-muted-foreground tabular-nums">
-                        {i + 1}
-                      </td>
-                      <td className="px-7 py-3">{s.name}</td>
-                      <td className="px-7 py-3 font-mono text-xs">{s.rollNo}</td>
-                      <td className="px-7 py-3 text-xs text-muted-foreground">
-                        {s.department ?? report.department}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[720px]">
+                  <thead className="bg-secondary/40">
+                    <tr>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        #
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Name
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Roll No
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Reg No
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Branch
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Sem
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Contact
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {report.students.map((s, i) => (
+                      <tr key={`${s.rollNo}-${i}`}>
+                        <td className="px-7 py-3 text-xs text-muted-foreground tabular-nums">
+                          {i + 1}
+                        </td>
+                        <td className="px-7 py-3">{s.name}</td>
+                        <td className="px-7 py-3 font-mono text-xs">{s.rollNo}</td>
+                        <td className="px-7 py-3 font-mono text-xs text-muted-foreground">
+                          {s.regNo ?? "—"}
+                        </td>
+                        <td className="px-7 py-3 text-xs text-muted-foreground">
+                          {s.branch ?? s.department ?? report.department}
+                        </td>
+                        <td className="px-7 py-3 text-xs text-muted-foreground">{s.semester ?? "—"}</td>
+                        <td className="px-7 py-3 text-xs font-mono text-muted-foreground">
+                          {s.contactNumber ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             {/* Attachments */}

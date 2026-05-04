@@ -3,6 +3,7 @@
  * All DB calls use HTTP REST (no TCP sockets) — works perfectly on Cloudflare Workers.
  */
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import * as bcrypt from "bcrypt-ts";
 import { getSupabase } from "./supabase";
 import { hodDepartmentMatches } from "./dept-scope";
@@ -81,6 +82,28 @@ function handleSupabaseError(error: any): never {
   throw new Error("Database error: " + msg);
 }
 
+const HOD_DUPLICATE_DEPT_MSG =
+  "This department already has a Head of Department. Only one active HOD is allowed per department (including the same branch under different names, e.g. CSE and Computer Science).";
+
+/** Block a new or newly approved HOD if an active approved HOD already exists for the same dept bucket. */
+async function assertSingleActiveHodPerDepartment(sb: SupabaseClient, department: string): Promise<void> {
+  const { data: rows, error } = await sb
+    .from("users")
+    .select("department, disabled")
+    .eq("role", "hod")
+    .eq("approval_status", "approved");
+
+  if (error) handleSupabaseError(error);
+
+  const dept = String(department).trim();
+  for (const row of rows ?? []) {
+    if (row.disabled === true) continue;
+    if (hodDepartmentMatches(dept, String(row.department))) {
+      throw new Error(HOD_DUPLICATE_DEPT_MSG);
+    }
+  }
+}
+
 // ── Auth Functions ────────────────────────────────────────────────────────────
 
 export const loginFn = createServerFn({ method: "POST" })
@@ -139,6 +162,10 @@ export const signupFn = createServerFn({ method: "POST" })
     const passwordHash = await bcrypt.hash(data.password, 10);
     const isHod = data.role === "hod";
 
+    if (isHod) {
+      await assertSingleActiveHodPerDepartment(sb, data.department);
+    }
+
     const { error } = await sb.from("users").insert({
       name: data.name.trim(),
       email,
@@ -192,6 +219,21 @@ export const getPendingSignupsFn = createServerFn({ method: "POST" }).handler(as
 export const reviewSignupFn = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     const sb = getSupabase();
+
+    if (data.action === "approve") {
+      const { data: pendingRow, error: fetchErr } = await sb
+        .from("users")
+        .select("role, department")
+        .eq("id", data.userId)
+        .eq("approval_status", "pending")
+        .maybeSingle();
+
+      if (fetchErr) handleSupabaseError(fetchErr);
+      if (pendingRow?.role === "hod") {
+        await assertSingleActiveHodPerDepartment(sb, String(pendingRow.department));
+      }
+    }
+
     const { error } = await sb
       .from("users")
       .update({

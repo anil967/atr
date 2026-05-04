@@ -42,6 +42,33 @@ const ALIAS_TO_BUCKET: Record<string, string> = (() => {
   return m;
 })();
 
+/** Short uppercase token embedded in new ATR reference ids (e.g. `bcet2026cse-01`). */
+const BUCKET_TO_REFERENCE_CODE: Record<string, string> = {
+  branch_csc: "CSE",
+  branch_ece: "ECE",
+  branch_eee: "EEE",
+  branch_mech: "ME",
+  branch_civil: "CE",
+  branch_mca: "MCA",
+  branch_mba: "MBA",
+  branch_chemical: "CHEM",
+  branch_it: "IT",
+};
+
+/**
+ * Department segment for stored ATR reference ids — always a compact code (CSE, ECE, …), never a full name.
+ * Unknown labels fall back to a short alphanumeric slug from the trimmed name.
+ */
+export function departmentReferenceCode(dept: string | undefined): string {
+  const n = deptNormalize(dept);
+  if (!n) return "DEPT";
+  const b = ALIAS_TO_BUCKET[n];
+  if (b && BUCKET_TO_REFERENCE_CODE[b]) return BUCKET_TO_REFERENCE_CODE[b];
+  const compact = n.replace(/[^a-z0-9]+/g, "");
+  const slug = compact.slice(0, 10);
+  return (slug || "dept").toUpperCase();
+}
+
 /**
  * Whether an HOD user may scope an ATR for their departmental queue/detail access.
  */

@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import {
+  actionItemEffectiveStudentCount,
   normalizeChiefMentorValidationChecklist,
   normalizeCoordinatorValidationChecklist,
   normalizeHodValidationChecklist,
@@ -12,6 +13,7 @@ import {
   type HodLineDecision,
   type HodValidationSnapshot,
 } from "./atr-types";
+import { departmentReferenceCode } from "./dept-scope";
 
 function pdfPageCount(doc: jsPDF): number {
   try {
@@ -273,32 +275,11 @@ export async function generateAtrPdf(
   /** Extra vertical shift so metadata clears the subtitle when title is taller. */
   let metadataYOffset = 0;
   if (iqacMergedChain) {
-    doc.setFontSize(12);
-    doc.text(
-      "ATR INSTITUTIONAL VALIDATION PACKAGE",
-      pageWidth / 2,
-      46,
-      { align: "center" },
-    );
-    doc.text("(MENTOR — CHIEF MENTOR CHAIN)", pageWidth / 2, 53, { align: "center" });
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...SECONDARY_COLOR);
-    doc.text(
-      "Merged for IQAC: print, countersign with stamp where required, then scan and upload the signed file to complete the cycle.",
-      pageWidth / 2,
-      61,
-      { align: "center", maxWidth: pageWidth - 36 },
-    );
-    metadataYOffset = 8;
-    doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
-    doc.setTextColor(30, 41, 59);
+    doc.text("Mentor-Mentees Repport", pageWidth / 2, 52, { align: "center" });
     doc.setDrawColor(...BORDER_COLOR);
     doc.setLineWidth(0.3);
-    doc.line(20, 66, pageWidth - 20, 66);
-    doc.setFontSize(13);
-    doc.setTextColor(30, 41, 59);
+    doc.line(20, 57, pageWidth - 20, 57);
   } else if (chiefPdf) {
     doc.text("CHIEF MENTOR REVIEW REPORT", pageWidth / 2, 49, { align: "center" });
     doc.setFontSize(9);
@@ -422,7 +403,7 @@ export async function generateAtrPdf(
       doc.setFont("helvetica", "normal");
       doc.setTextColor(30, 41, 59);
       doc.text(report.mentorName, ML, y + 5);
-      doc.text(report.department, pageWidth / 2, y + 5, { align: "center" });
+      doc.text(departmentReferenceCode(report.department), pageWidth / 2, y + 5, { align: "center" });
       doc.text(
         `${format(new Date(report.startDate), "MMM d")} - ${format(new Date(report.endDate), "MMM d, yyyy")}`,
         MR,
@@ -466,7 +447,7 @@ export async function generateAtrPdf(
     const actionRows = actions.map((a, i) => [
       { content: (i + 1).toString(), styles: { halign: "center" } },
       a.issue,
-      { content: a.studentCount.toString(), styles: { halign: "center" } },
+      { content: String(actionItemEffectiveStudentCount(a)), styles: { halign: "center" } },
       a.actionTaken,
       a.timeline,
       a.outcome,
@@ -508,22 +489,25 @@ export async function generateAtrPdf(
       y += 5 + splitDesc.length * 4 + 8;
     }
 
-    if (y > pageHeight - 45) {
+    if (y > pageHeight - 55) {
       doc.addPage();
       y = 35;
     } else {
       y += 25;
     }
 
-    const sigWidth = 55;
-    doc.setDrawColor(...SECONDARY_COLOR);
-    doc.setLineWidth(0.2);
-
-    const sigX = (pageWidth - sigWidth) / 2;
-    doc.line(sigX, y, sigX + sigWidth, y);
+    const sigLen = Math.min(72, MR - ML - 24);
+    doc.setDrawColor(55, 65, 81);
+    doc.setLineWidth(0.25);
+    doc.line(ML, y, ML + sigLen, y);
     doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...SECONDARY_COLOR);
+    doc.text("Mentor signature", ML, y + 4);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
     doc.setTextColor(30, 41, 59);
-    doc.text("MENTOR SIGNATURE", pageWidth / 2, y + 4, { align: "center" });
+    doc.text(report.mentorName, ML, y + 10);
     y += 22;
   };
 

@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "dev:cf": "wrangler dev",
     "deploy:cf": "vite build && wrangler deploy",
-    "seed": "tsx --env-file=.env.local scripts/seed-admin.ts",
+    "seed": "tsx scripts/seed-supabase-users.ts",
+    "seed:mongodb": "tsx --env-file=.env.local scripts/seed-admin.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

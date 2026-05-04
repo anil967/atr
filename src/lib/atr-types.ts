@@ -39,11 +39,23 @@ export const STATUS_LABELS: Record<AtrStatus, string> = {
   rejected: "Rejected",
 };
 
+/** Mentor roster / ATR beneficiary row — Excel import + manual edit on My mentee. */
 export interface ParsedStudent {
+  /** Stable id for UI keys and edits (optional on legacy rows). */
+  id?: string;
   name: string;
   rollNo: string;
+  semester?: string;
+  regNo?: string;
+  fatherName?: string;
+  branch?: string;
+  year?: string;
+  contactNumber?: string;
+  parentContactNumber?: string;
+  address?: string;
+  /** Legacy / alternate label for branch */
   department?: string;
-  [key: string]: string | undefined;
+  email?: string;
 }
 
 export interface AtrAttachment {
@@ -256,15 +268,34 @@ export function normalizeCoordinatorValidationChecklist(
   };
 }
 
+/** Mentee tagged on an action row (from mentor roster via @ mention). */
+export interface TaggedMentee {
+  rollNo: string;
+  name: string;
+}
+
 export interface ActionItem {
   id: string;
   issue: string;
   studentCount: number;
+  /** Selected mentees for this issue; when present, `studentCount` should match `taggedStudents.length`. */
+  taggedStudents?: TaggedMentee[];
   actionTaken: string;
   timeline: string;
   outcome: string;
   evidenceLink?: string;
   evidenceFiles?: AtrAttachment[];
+}
+
+/** Count for validation / PDF: prefers tagged list, else legacy numeric `studentCount`. */
+export function actionItemEffectiveStudentCount(
+  row: Pick<ActionItem, "studentCount" | "taggedStudents">,
+): number {
+  const tags = row.taggedStudents;
+  if (Array.isArray(tags) && tags.length > 0) return tags.length;
+  const sc = Number(row.studentCount ?? 0);
+  if (Number.isNaN(sc) || sc < 1) return 0;
+  return Math.floor(sc);
 }
 
 export interface AtrReport {
@@ -316,10 +347,6 @@ export function atrDisplayLabel(r: AtrReport): string {
  */
 export function totalStudentsSummary(r: AtrReport): number {
   const listLen = r.students?.length ?? 0;
-  const fromActions = (r.actions ?? []).reduce((sum, a) => {
-    const n = Number(a.studentCount);
-    const add = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-    return sum + add;
-  }, 0);
+  const fromActions = (r.actions ?? []).reduce((sum, a) => sum + actionItemEffectiveStudentCount(a), 0);
   return Math.max(listLen, fromActions);
 }

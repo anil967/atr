@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
+import type { ParsedStudent } from "./atr-types";
+import { ensureStudentIds } from "./student-excel";
 import { getStudentsFn, saveStudentsFn } from "./auth-server";
 
-export interface Student {
-  name: string;
-  rollNo: string;
-  semester: string;
-  email?: string;
-}
+export type Student = ParsedStudent;
 
 const KEY_PREFIX = "bcet-students-";
 const EVT = "bcet-students-changed";
@@ -20,7 +17,7 @@ export function listStudentsLocal(mentorId: string): Student[] {
   const raw = localStorage.getItem(getStoreKey(mentorId));
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as Student[];
+    return ensureStudentIds(JSON.parse(raw) as Student[]);
   } catch {
     return [];
   }
@@ -31,10 +28,11 @@ export async function listStudents(mentorId: string): Promise<Student[]> {
   try {
     const remote = await getStudentsFn({ data: { mentorId } });
     if (remote) {
+      const normalized = ensureStudentIds(remote as Student[]);
       if (typeof window !== "undefined") {
-        localStorage.setItem(getStoreKey(mentorId), JSON.stringify(remote));
+        localStorage.setItem(getStoreKey(mentorId), JSON.stringify(normalized));
       }
-      return remote;
+      return normalized;
     }
   } catch (err) {
     console.warn("Failed to fetch students from server, using local cache", err);

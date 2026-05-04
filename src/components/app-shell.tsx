@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
   { to: "/atrs", label: "My ATRs", icon: FileText },
   { to: "/atrs/new", label: "Create ATR", icon: PlusCircle },
   { to: "/notifications", label: "Notifications", icon: Bell },
-  { to: "/team", label: "My Group", icon: Users },
+  { to: "/team", label: "My mentee", icon: Users },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         return item;
       })
       .filter((item) => {
-        // "My Group" is mentor-only (student roster / Excel import).
+        // "My mentee" is mentor-only (student roster / Excel import).
         if (item.to === "/team") return user.role === "mentor";
         return true;
       }),

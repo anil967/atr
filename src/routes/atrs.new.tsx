@@ -10,7 +10,14 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser, useCurrentUser } from "@/lib/auth-store";
 import { createReport, MAX_ATR_PER_ACADEMIC_YEAR, useReports } from "@/lib/atr-store";
-import { formatAcademicYearHuman, type AtrAttachment, type ParsedStudent } from "@/lib/atr-types";
+import {
+  actionItemEffectiveStudentCount,
+  formatAcademicYearHuman,
+  type AtrAttachment,
+  type ParsedStudent,
+} from "@/lib/atr-types";
+import { MenteeTagField } from "@/components/mentee-tag-field";
+import { ensureStudentIds, parseStudentRowsFromSheet } from "@/lib/student-excel";
 import { generateAtrPdf } from "@/lib/pdf-utils";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -106,8 +113,8 @@ function isIssueFullyComplete(row: {
   if (!String(row.actionTaken ?? "").trim()) return false;
   if (!String(row.timeline ?? "").trim()) return false;
   if (!String(row.outcome ?? "").trim()) return false;
-  const sc = Number(row.studentCount ?? 0);
-  if (Number.isNaN(sc) || sc < 1) return false;
+  if (actionItemEffectiveStudentCount(row as { studentCount: number; taggedStudents?: unknown }) < 1)
+    return false;
   const ev = row.evidenceFiles;
   return Array.isArray(ev) && ev.length > 0;
 }
@@ -123,8 +130,8 @@ function missingIssueFieldLabels(row: {
 }): string[] {
   const missing: string[] = [];
   if (!String(row.issue ?? "").trim()) missing.push("Issue identified");
-  const sc = Number(row.studentCount ?? 0);
-  if (Number.isNaN(sc) || sc < 1) missing.push("Number of students (minimum 1)");
+  if (actionItemEffectiveStudentCount(row as { studentCount: number; taggedStudents?: unknown }) < 1)
+    missing.push("Students (@ mention at least one mentee)");
   if (!String(row.actionTaken ?? "").trim()) missing.push("Action taken");
   if (!String(row.timeline ?? "").trim()) missing.push("Timeline or milestone date");
   if (!String(row.outcome ?? "").trim()) missing.push("Outcome / impact");
@@ -153,8 +160,7 @@ function rowCompletionPctForIssue(row: {
 }) {
   let n = 0;
   if (String(row.issue ?? "").trim()) n++;
-  const sc = Number(row.studentCount ?? 0);
-  if (!Number.isNaN(sc) && sc > 0) n++;
+  if (actionItemEffectiveStudentCount(row as { studentCount: number; taggedStudents?: unknown }) > 0) n++;
   if (String(row.actionTaken ?? "").trim()) n++;
   if (String(row.timeline ?? "").trim()) n++;
   if (String(row.outcome ?? "").trim()) n++;
@@ -240,7 +246,18 @@ function NewAtrPage() {
   };
 
   const addActionRow = () => {
-    setActions([...actions, { id: crypto.randomUUID(), issue: "", studentCount: 0, actionTaken: "", timeline: "", outcome: "" }]);
+    setActions([
+      ...actions,
+      {
+        id: crypto.randomUUID(),
+        issue: "",
+        studentCount: 0,
+        taggedStudents: [],
+        actionTaken: "",
+        timeline: "",
+        outcome: "",
+      },
+    ]);
   };
 
   const removeActionRow = (id: string) => {
@@ -256,6 +273,7 @@ function NewAtrPage() {
       const copy = {
         ...src,
         id: crypto.randomUUID(),
+        taggedStudents: [...(src.taggedStudents || [])],
         evidenceFiles: deepFiles,
       };
       return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
@@ -369,9 +387,9 @@ function NewAtrPage() {
   useEffect(() => {
     if (user?.id) {
       import("@/lib/auth-server").then(({ getStudentsFn }) => {
-        getStudentsFn({ data: { mentorId: user.id } }).then(remoteStudents => {
+        getStudentsFn({ data: { mentorId: user.id } }).then((remoteStudents) => {
           if (remoteStudents && Array.isArray(remoteStudents)) {
-            setStudents(remoteStudents);
+            setStudents(ensureStudentIds(remoteStudents as ParsedStudent[]));
           }
         });
       });
@@ -398,20 +416,15 @@ function NewAtrPage() {
         const wb = XLSX.read(bstr, { type: "binary" });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws) as any[];
-
-        const parsed: ParsedStudent[] = data.map(row => {
-          const pick = (keys: string[]) => {
-            const k = Object.keys(row).find(rk => keys.some(kk => rk.toLowerCase().includes(kk.toLowerCase())));
-            return k ? String(row[k]) : undefined;
-          };
-          return {
-            name: pick(["name", "student", "full name"]) || "Unknown",
-            rollNo: pick(["roll", "reg", "id", "no"]) || "N/A",
-            department: pick(["dept", "branch", "stream"]),
-          };
-        });
-        setStudents(parsed);
+        const data = XLSX.utils.sheet_to_json(ws) as Record<string, unknown>[];
+        const parsed = parseStudentRowsFromSheet(data);
+        if (parsed.length === 0) {
+          setParseError(
+            "No valid rows (each needs Roll No). Use headers: Student Name, Roll No, Reg No, Father's Name, Branch, Year, Semester, contacts, Address.",
+          );
+          return;
+        }
+        setStudents(ensureStudentIds(parsed));
       } catch (err) {
         setParseError("Failed to parse Excel. Please check columns.");
       }
@@ -1011,15 +1024,6 @@ function NewAtrPage() {
                       const num = globalIdx >= 0 ? globalIdx + 1 : filteredIdx + 1;
                       const pct = rowCompletionPctForIssue(row);
                       const maxStudents = students.length;
-                      const clampCount = (n: number) => {
-                        const lower = Math.max(0, n);
-                        if (maxStudents <= 0) return lower;
-                        if (lower > maxStudents) {
-                          toast.error(`Maximum ${maxStudents} students in your roster (add students next step)`);
-                          return maxStudents;
-                        }
-                        return lower;
-                      };
 
                       const collapsed = !!collapsedIssueIds[row.id];
                       const issuePreview =
@@ -1205,43 +1209,46 @@ function NewAtrPage() {
                             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,280px)_1fr] xl:grid-cols-[260px_minmax(0,1fr)] gap-6">
                               <div className="space-y-4">
                                 <div>
-                                  <label className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                                  <label
+                                    htmlFor={`mentees-${row.id}`}
+                                    className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"
+                                  >
                                     <UsersIcon className="size-3.5 text-growth/80" aria-hidden />
-                                    No. of students
+                                    Students
                                   </label>
-                                  <div className="inline-flex items-center gap-1 rounded-[1.25rem] border border-growth/20 bg-background/70 dark:bg-black/35 p-1.5 shadow-inner">
-                                    <button
-                                      type="button"
-                                      className="size-10 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-growth/10 hover:text-growth transition-colors disabled:opacity-30"
-                                      disabled={row.studentCount <= 0}
-                                      onClick={() =>
-                                        updateActionRow(row.id, "studentCount", clampCount(Number(row.studentCount) - 1))
-                                      }
-                                    >
-                                      −
-                                    </button>
-                                    <span className="min-w-[2.5rem] text-center font-bold tabular-nums text-sm">
-                                      {row.studentCount}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      className={cn(
-                                        "size-10 rounded-xl flex items-center justify-center transition-colors",
-                                        maxStudents > 0 && Number(row.studentCount) >= maxStudents
-                                          ? "text-muted-foreground/35 cursor-not-allowed"
-                                          : "text-muted-foreground hover:bg-growth/10 hover:text-growth",
-                                      )}
-                                      disabled={maxStudents > 0 && Number(row.studentCount) >= maxStudents}
-                                      aria-label="Increase student count"
-                                      onClick={() =>
-                                        updateActionRow(row.id, "studentCount", clampCount(Number(row.studentCount) + 1))
-                                      }
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                  <p className="mt-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tight">
-                                    Max aligned to group roster: {Math.max(maxStudents, 0)}
+                                  <MenteeTagField
+                                    roster={students}
+                                    value={row.taggedStudents ?? []}
+                                    disabled={maxStudents === 0}
+                                    inputId={`mentees-${row.id}`}
+                                    onChange={(tags) => {
+                                      const capped =
+                                        maxStudents > 0 ? tags.slice(0, maxStudents) : tags;
+                                      setActions((prev) =>
+                                        prev.map((a) =>
+                                          a.id === row.id
+                                            ? {
+                                                ...a,
+                                                taggedStudents: capped,
+                                                studentCount: capped.length,
+                                              }
+                                            : a,
+                                        ),
+                                      );
+                                    }}
+                                    onEnterCheck={(e) => revealIssueRequirementsOnEnter(e, row, num)}
+                                  />
+                                  <p className="mt-2 text-[10px] text-muted-foreground leading-relaxed">
+                                    Type <kbd className="px-1 rounded border border-border/60 bg-secondary/80 font-mono">@</kbd>{" "}
+                                    to choose from your My mentee list.{" "}
+                                    {maxStudents > 0 ? (
+                                      <>
+                                        Roster: {maxStudents} · tagged:{" "}
+                                        {(row.taggedStudents ?? []).length}
+                                      </>
+                                    ) : (
+                                      <>Add mentees under My mentee or import the attendance sheet on this page.</>
+                                    )}
                                   </p>
                                 </div>
 
