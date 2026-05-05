@@ -62,7 +62,9 @@ export interface AtrAttachment {
   name: string;
   size: number;
   type: string;
-  /** data URL preview for images */
+  /** Supabase Storage path/URL (remote storage) */
+  storagePath?: string;
+  /** data URL preview (local cache / small thumbnails) */
   dataUrl?: string;
 }
 

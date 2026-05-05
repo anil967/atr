@@ -23,7 +23,13 @@ function seed(): AtrReport[] {
 
 /** Strip heavy base64 `dataUrl` before localStorage — keeps names/types/sizes only (~5MB quota). Full payload goes to saveAtrFn. */
 export function attachmentMetaOnly(a: AtrAttachment): AtrAttachment {
-  return { name: a.name, size: a.size, type: a.type };
+  return {
+    name: a.name,
+    size: a.size,
+    type: a.type,
+    storagePath: a.storagePath,
+    dataUrl: a.dataUrl?.startsWith("http") ? a.dataUrl : undefined,
+  };
 }
 
 export function sanitizeReportForStorage(report: AtrReport): AtrReport {

@@ -18,6 +18,7 @@ import {
 } from "@/lib/atr-types";
 import { MenteeTagField } from "@/components/mentee-tag-field";
 import { ensureStudentIds, parseStudentRowsFromSheet } from "@/lib/student-excel";
+import { uploadAtrFileFn } from "@/lib/auth-server";
 import { generateAtrPdf } from "@/lib/pdf-utils";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -230,8 +231,18 @@ function NewAtrPage() {
       toast.error("This file cannot be previewed. Re-upload the file.");
       return;
     }
+    if (attachment.dataUrl?.startsWith("http")) {
+      setAttachmentPreview({
+        isOpen: true,
+        name: attachment.name,
+        mime: attachment.type || "application/octet-stream",
+        url: attachment.dataUrl,
+      });
+      return;
+    }
+
     try {
-      const [meta, base64] = attachment.dataUrl.split(",", 2);
+      const [meta, base64] = (attachment.dataUrl || "").split(",", 2);
       const mimeFromUrl = meta?.match(/data:([^;]+);base64/i)?.[1];
       const mime = attachment.type || mimeFromUrl || "application/octet-stream";
       const binary = atob(base64 ?? "");
@@ -432,10 +443,18 @@ function NewAtrPage() {
     reader.readAsBinaryString(file);
   };
 
-  const addEvidenceFilesToRow = (rowId: string, files: File[]) => {
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (evt) => {
+  const addEvidenceFilesToRow = async (rowId: string, files: File[]) => {
+    if (!user?.id) return;
+
+    for (const file of files) {
+      const toastId = toast.loading(`Uploading ${file.name}…`);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("mentorId", user.id);
+
+        const result = await uploadAtrFileFn({ data: formData });
+
         setActions((prev) =>
           prev.map((a) => {
             if (a.id === rowId) {
@@ -448,17 +467,21 @@ function NewAtrPage() {
                     name: file.name,
                     size: file.size,
                     type: file.type,
-                    dataUrl: evt.target?.result as string | undefined,
+                    storagePath: result.storagePath,
+                    dataUrl: result.publicUrl, // Use public URL as the preview
                   },
                 ],
               };
             }
-            return a;
+              return a;
           }),
         );
-      };
-      reader.readAsDataURL(file);
-    });
+        toast.success(`Uploaded ${file.name}`, { id: toastId });
+      } catch (err) {
+        console.error(err);
+        toast.error(`Failed to upload ${file.name}`, { id: toastId });
+      }
+    }
   };
 
   const handleRowFileUpload = (rowId: string, e: ChangeEvent<HTMLInputElement>) => {
@@ -479,20 +502,36 @@ function NewAtrPage() {
     }));
   };
 
-  const handleAttachments = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleAttachments = async (e: ChangeEvent<HTMLInputElement>) => {
+    if (!user?.id) return;
     const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        setAttachments(prev => [...prev, {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          dataUrl: evt.target?.result as string | undefined
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
+    e.target.value = "";
+
+    for (const file of files) {
+      const toastId = toast.loading(`Uploading ${file.name}…`);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("mentorId", user.id);
+
+        const result = await uploadAtrFileFn({ data: formData });
+
+        setAttachments((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            storagePath: result.storagePath,
+            dataUrl: result.publicUrl,
+          },
+        ]);
+        toast.success(`Uploaded ${file.name}`, { id: toastId });
+      } catch (err) {
+        console.error(err);
+        toast.error(`Failed to upload ${file.name}`, { id: toastId });
+      }
+    }
   };
 
   const removeAttachment = (idx: number) => {

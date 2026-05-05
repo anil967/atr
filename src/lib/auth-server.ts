@@ -424,17 +424,27 @@ export const getAtrsFn = createServerFn({ method: "POST" })
     if (user.role === "hod") {
       const { data: rows, error } = await sb
         .from("atrs")
-        .select("*")
+        .select(`
+          id,
+          payload->mentorName,
+          payload->department,
+          payload->status,
+          payload->academicYear,
+          payload->startDate,
+          payload->endDate,
+          payload->actions,
+          payload->mentorId,
+          created_at
+        `)
         .order("created_at", { ascending: false });
       if (error) handleSupabaseError(error);
       return (rows ?? [])
-        .filter((row) => {
-          const payload = row.payload as AtrReport | null | undefined;
+        .filter((row: any) => {
           return (
-            payload != null && hodDepartmentMatches(payload.department, user.department)
+            row.department != null && hodDepartmentMatches(row.department, user.department)
           );
         })
-        .map((row) => ({ ...(row.payload as object), id: row.id }));
+        .map((row: any) => ({ ...row }));
     }
 
     if (user.role === "coordinator") {
@@ -446,28 +456,48 @@ export const getAtrsFn = createServerFn({ method: "POST" })
       if (mentorIds.size === 0) return [];
       const { data: rows, error } = await sb
         .from("atrs")
-        .select("*")
+        .select(`
+          id,
+          payload->mentorName,
+          payload->department,
+          payload->status,
+          payload->academicYear,
+          payload->startDate,
+          payload->endDate,
+          payload->actions,
+          payload->mentorId,
+          created_at
+        `)
         .order("created_at", { ascending: false });
       if (error) handleSupabaseError(error);
       return (rows ?? [])
-        .filter((row) => {
-          const payload = row.payload as AtrReport | null | undefined;
-          return payload?.mentorId != null && mentorIds.has(payload.mentorId);
+        .filter((row: any) => {
+          return row.mentorId != null && mentorIds.has(row.mentorId);
         })
-        .map((row) => ({ ...(row.payload as object), id: row.id }));
+        .map((row: any) => ({ ...row }));
     }
 
-    let query = sb.from("atrs").select("*");
+    let query = sb.from("atrs").select(`
+      id,
+      payload->mentorName,
+      payload->department,
+      payload->status,
+      payload->academicYear,
+      payload->startDate,
+      payload->endDate,
+      payload->actions,
+      payload->mentorId,
+      created_at
+    `);
 
     if (user.role === "mentor") {
       query = query.filter("payload->>mentorId", "eq", user.id);
     }
-    // Admin and Chief Mentor see all ATRs (no filter)
 
     const { data: rows, error } = await query.order("created_at", { ascending: false });
 
     if (error) handleSupabaseError(error);
-    return (rows ?? []).map((row) => ({ ...(row.payload as object), id: row.id }));
+    return (rows ?? []).map((row: any) => ({ ...row }));
   });
 
 /** Full payload (includes attachment `dataUrl` when present). Local cache strips those to save quota. */
@@ -793,4 +823,38 @@ export const saveMentorMappingFn = createServerFn({ method: "POST" })
     });
     if (error) handleSupabaseError(error);
     return { ok: true };
+  });
+export const uploadAtrFileFn = createServerFn({ method: "POST" })
+  .handler(async (ctx: { data: FormData }) => {
+    const file = ctx.data.get("file") as File;
+    const mentorId = ctx.data.get("mentorId") as string;
+    
+    if (!file || !mentorId) {
+      throw new Error("Missing file or mentorId");
+    }
+
+    const sb = getSupabase();
+    const bucket = "atr-evidence";
+    
+    // Sanitize filename and create a unique path
+    const timestamp = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+    const path = `${mentorId}/${timestamp}-${safeName}`;
+
+    const { data, error } = await sb.storage.from(bucket).upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+    if (error) {
+      console.error("Storage upload error:", error);
+      handleSupabaseError(error);
+    }
+
+    const { data: { publicUrl } } = sb.storage.from(bucket).getPublicUrl(path);
+
+    return {
+      storagePath: path,
+      publicUrl: publicUrl,
+    };
   });

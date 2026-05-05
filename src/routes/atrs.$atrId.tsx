@@ -92,7 +92,7 @@ const COORDINATOR_STATEMENT_ROWS: { key: CoordinatorChecklistKey; label: string 
   },
 ];
 
-import { getAtrByIdFn } from "@/lib/auth-server";
+import { getAtrByIdFn, uploadAtrFileFn } from "@/lib/auth-server";
 import { cn } from "@/lib/utils";
 
 function normalizeRollNo(r: string | undefined): string {
@@ -302,8 +302,18 @@ function AtrDetailPage() {
       }
       return;
     }
+    if (attachment.dataUrl?.startsWith("http")) {
+      setAttachmentPreview({
+        isOpen: true,
+        name: attachment.name,
+        mime: attachment.type || "application/octet-stream",
+        url: attachment.dataUrl,
+      });
+      return;
+    }
+
     try {
-      const [meta, base64] = attachment.dataUrl.split(",", 2);
+      const [meta, base64] = (attachment.dataUrl || "").split(",", 2);
       const mimeFromUrl = meta?.match(/data:([^;]+);base64/i)?.[1];
       const mime = attachment.type || mimeFromUrl || "application/octet-stream";
       const binary = atob(base64 ?? "");
@@ -654,7 +664,8 @@ function AtrDetailPage() {
       .catch(() => {});
   };
 
-  const handleIqacScanFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleIqacScanFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    if (!user) return;
     const file = e.target.files?.[0];
     if (!file) {
       setIqacScanDraft(null);
@@ -666,17 +677,28 @@ function AtrDetailPage() {
       e.target.value = "";
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const dataUrl = evt.target?.result as string | undefined;
+
+    const toastId = toast.loading(`Uploading ${file.name}…`);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("mentorId", user.id);
+
+      const result = await uploadAtrFileFn({ data: formData });
+
       setIqacScanDraft({
         name: file.name,
         size: file.size,
         type: mime,
-        dataUrl,
+        storagePath: result.storagePath,
+        dataUrl: result.publicUrl,
       });
-    };
-    reader.readAsDataURL(file);
+      toast.success(`Uploaded ${file.name}`, { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to upload ${file.name}`, { id: toastId });
+      e.target.value = "";
+    }
   };
 
   const handleIqacApproveMergedAndDownload = async () => {
