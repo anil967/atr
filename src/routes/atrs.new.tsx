@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, type ChangeEvent, type KeyboardEvent } from "react";
+import React, { useState, useEffect, useMemo, type ChangeEvent, type KeyboardEvent } from "react";
 import * as XLSX from "xlsx";
 import { 
   ArrowLeft, Upload, FileSpreadsheet, ImagePlus, X, Plus, 
@@ -168,6 +168,299 @@ function rowCompletionPctForIssue(row: {
   return Math.round((n / 6) * 100);
 }
 
+// ── Memoized Components for Performance ───────────────────────────────────────
+
+const ActionCard = React.memo(
+  ({
+    row,
+    num,
+    students,
+    collapsed,
+    requirementsRevealed,
+    onToggleCollapse,
+    onUpdate,
+    onDuplicate,
+    onDelete,
+    onRevealRequirements,
+    onAddEvidence,
+    onOpenPreview,
+  }: {
+    row: any;
+    num: number;
+    students: ParsedStudent[];
+    collapsed: boolean;
+    requirementsRevealed: boolean;
+    onToggleCollapse: (id: string) => void;
+    onUpdate: (id: string, field: string, value: any) => void;
+    onDuplicate: (id: string) => void;
+    onDelete: (id: string) => void;
+    onRevealRequirements: (e: any, row: any, num: number) => void;
+    onAddEvidence: (id: string, files: File[]) => void;
+    onOpenPreview: (f: any) => void;
+  }) => {
+    const pct = rowCompletionPctForIssue(row);
+    const isComplete = isIssueFullyComplete(row);
+    const missing = missingIssueFieldLabels(row);
+    const previewText =
+      typeof row.issue === "string" && row.issue.trim()
+        ? row.issue.trim().slice(0, 72) + (row.issue.trim().length > 72 ? "…" : "")
+        : null;
+
+    return (
+      <article
+        className={cn(
+          "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-500 rounded-[1.5rem]",
+          "border border-growth/15 bg-secondary/35 dark:bg-black/25 backdrop-blur-lg",
+          "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] hover:shadow-[0_20px_50px_-20px_rgba(45,79,60,0.45)]",
+          "transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:border-growth/35 hover:ring-1 hover:ring-growth/15",
+        )}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4 p-5 md:p-6 border-b border-growth/10">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => onToggleCollapse(row.id)}
+              className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-growth/20 bg-secondary/40 text-muted-foreground hover:bg-growth/15 hover:text-growth transition-colors"
+            >
+              <ChevronDown className={cn("size-5 transition-transform duration-300", collapsed && "-rotate-90")} />
+            </button>
+            <div className="hidden sm:flex size-10 shrink-0 rounded-full bg-growth/10 border border-growth/20 items-center justify-center text-muted-foreground/70">
+              <GripVertical className="size-5" />
+            </div>
+            <div className="size-10 shrink-0 rounded-full bg-gradient-to-br from-growth to-growth/70 text-growth-foreground shadow-md flex items-center justify-center font-bold text-sm tabular-nums">
+              {num}
+            </div>
+            <button
+              type="button"
+              onClick={() => onToggleCollapse(row.id)}
+              className="min-w-0 text-left flex-1 rounded-xl px-2 py-0.5 -mx-2 hover:bg-growth/5 transition-colors"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Issue #{num}</p>
+              {collapsed && previewText ? (
+                <p className="text-[11px] text-foreground/90 line-clamp-2 mt-1 leading-snug">{previewText}</p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {isComplete ? (
+                    <span className="text-success font-semibold text-xs">Marked complete · ready to validate</span>
+                  ) : (
+                    "Incomplete — refine fields to reach 100%"
+                  )}
+                </p>
+              )}
+            </button>
+          </div>
+          <div className="flex rounded-2xl border border-border/50 bg-secondary/40 p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => toast.success("Progress saved locally.")}
+              className="p-2.5 rounded-[0.875rem] text-muted-foreground hover:text-growth hover:bg-background/80 transition-colors"
+            >
+              <Save className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDuplicate(row.id)}
+              className="p-2.5 rounded-[0.875rem] text-muted-foreground hover:text-growth hover:bg-background/80 transition-colors"
+            >
+              <Copy className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(row.id)}
+              className="p-2.5 rounded-[0.875rem] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className={cn("px-5 md:px-6 pt-2", collapsed ? "pb-5 md:pb-5" : "pb-3 md:pb-4")}>
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Row completeness</span>
+            <span className="text-[11px] font-bold tabular-nums text-growth">{pct}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-background/70 overflow-hidden border border-growth/10">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-growth/80 to-emerald-300/90 transition-[width] duration-700 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+
+        {!collapsed && requirementsRevealed && !isComplete && (
+          <div className="mx-5 md:mx-6 mb-3 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-warning-foreground">
+            <p className="font-bold uppercase tracking-[0.12em] text-[10px] mb-2">Still needed</p>
+            <ul className="list-disc pl-5 space-y-1 text-[11px] leading-snug">
+              {missing.map((label, li) => (
+                <li key={li}>{label}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!collapsed && (
+          <div className="px-5 md:px-6 pb-6 md:pb-7 space-y-5">
+            <div className="relative group">
+              <label className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                <AlertCircle className="size-3.5 text-growth/80" /> Issue identified
+              </label>
+              <textarea
+                rows={3}
+                value={row.issue}
+                placeholder="Describe the issue..."
+                className="w-full min-h-[5.25rem] rounded-2xl px-4 py-3 text-sm bg-background/80 border border-growth/10 focus:outline-none focus:ring-2 focus:ring-growth/35"
+                onChange={(e) => onUpdate(row.id, "issue", e.target.value)}
+                onKeyDown={(e) => onRevealRequirements(e, row, num)}
+              />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    <UsersIcon className="size-3.5 text-growth/80" /> Students
+                  </label>
+                  <MenteeTagField
+                    roster={students}
+                    value={row.taggedStudents ?? []}
+                    disabled={students.length === 0}
+                    onChange={(tags) => onUpdate(row.id, "taggedStudents", tags)}
+                    onEnterCheck={(e) => onRevealRequirements(e, row, num)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    <CalendarDays className="size-3.5 text-growth/80" /> Timeline
+                  </label>
+                  <input
+                    type="text"
+                    value={row.timeline}
+                    placeholder="e.g. Week 6..."
+                    className="w-full rounded-2xl px-4 py-3 text-sm bg-background/80 border border-growth/10 focus:outline-none focus:ring-2 focus:ring-growth/35"
+                    onChange={(e) => onUpdate(row.id, "timeline", e.target.value)}
+                    onKeyDown={(e) => onRevealRequirements(e, row, num)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-5">
+                <div className="relative">
+                  <label className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    <ListChecks className="size-3.5 text-growth/80" /> Action taken
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={row.actionTaken}
+                    placeholder="Intervention steps..."
+                    className="w-full min-h-[5.75rem] rounded-2xl px-4 py-3 text-sm bg-background/80 border border-growth/10 focus:outline-none focus:ring-2 focus:ring-growth/35"
+                    onChange={(e) => onUpdate(row.id, "actionTaken", e.target.value)}
+                    onKeyDown={(e) => onRevealRequirements(e, row, num)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    <Sparkles className="size-3.5 text-growth/80" /> Outcome
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={row.outcome}
+                    placeholder="Results..."
+                    className="w-full min-h-[4.75rem] rounded-2xl px-4 py-3 text-sm bg-background/80 border border-growth/10 focus:outline-none focus:ring-2 focus:ring-growth/35"
+                    onChange={(e) => onUpdate(row.id, "outcome", e.target.value)}
+                    onKeyDown={(e) => onRevealRequirements(e, row, num)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3">
+              <label className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                <Paperclip className="size-3.5 text-growth/80" /> Evidence
+              </label>
+              <div
+                className="rounded-[1.25rem] border-2 border-dashed border-growth/25 bg-secondary/20 p-5 hover:bg-growth/5 transition-colors"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  onAddEvidence(row.id, Array.from(e.dataTransfer.files || []));
+                }}
+              >
+                <label className="flex flex-col items-center justify-center cursor-pointer gap-2 py-2">
+                  <Upload className="size-6 text-growth" />
+                  <span className="text-xs font-semibold">Drag & drop or browse</span>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => onAddEvidence(row.id, Array.from(e.target.files || []))}
+                  />
+                </label>
+                {(row.evidenceFiles || []).length > 0 && (
+                  <ul className="mt-4 flex flex-wrap gap-2 pt-4 border-t border-growth/10">
+                    {row.evidenceFiles.map((f: any, fi: number) => (
+                      <li key={fi} className="flex items-center gap-2 pl-3 pr-1 py-1.5 rounded-xl border border-growth/15 bg-growth/5">
+                        <FileCheck className="size-3.5 text-growth" />
+                        <button
+                          type="button"
+                          className="truncate text-[10px] font-bold text-growth/90 hover:underline"
+                          onClick={() => onOpenPreview(f)}
+                        >
+                          {f.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </article>
+    );
+  },
+  (prev, next) => {
+    // Custom equality check: only re-render if its own row data or collapse state changes
+    return (
+      prev.row === next.row &&
+      prev.collapsed === next.collapsed &&
+      prev.requirementsRevealed === next.requirementsRevealed &&
+      prev.num === next.num &&
+      prev.students === next.students
+    );
+  },
+);
+
+const StudentRosterTable = React.memo(({ students, department }: { students: ParsedStudent[]; department: string }) => {
+  if (students.length === 0) return null;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm min-w-[700px]">
+        <thead className="bg-secondary/40">
+          <tr>
+            <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">#</th>
+            <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Name</th>
+            <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Roll No</th>
+            <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Branch</th>
+            <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sem</th>
+            <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Contact</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {students.map((s, i) => (
+            <tr key={`${s.rollNo}-${i}`}>
+              <td className="px-7 py-3 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
+              <td className="px-7 py-3 font-medium">{s.name}</td>
+              <td className="px-7 py-3 font-mono text-xs">{s.rollNo}</td>
+              <td className="px-7 py-3 text-xs text-muted-foreground">{s.branch || department}</td>
+              <td className="px-7 py-3 text-xs text-muted-foreground">{s.semester || "—"}</td>
+              <td className="px-7 py-3 text-xs font-mono text-muted-foreground">{s.contactNumber || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+});
+
+
 function NewAtrPage() {
   const user = useCurrentUser();
   const navigate = useNavigate();
@@ -237,8 +530,9 @@ function NewAtrPage() {
       const binary = atob(base64 ?? "");
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
-      setAttachmentPreview({ isOpen: true, name: attachment.name, mime, url: blobUrl });
+      const normalizedMime = mime.toLowerCase() === "pdf" ? "application/pdf" : mime;
+      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: normalizedMime }));
+      setAttachmentPreview({ isOpen: true, name: attachment.name, mime: normalizedMime, url: blobUrl });
     } catch (e) {
       console.error(e);
       toast.error("Could not preview this file.");
@@ -739,7 +1033,7 @@ function NewAtrPage() {
                     className="max-h-full max-w-full object-contain rounded-xl border border-border/60 bg-surface"
                   />
                 </div>
-              ) : attachmentPreview.mime === "application/pdf" ? (
+              ) : attachmentPreview.mime.toLowerCase().includes("pdf") ? (
                 <iframe title={attachmentPreview.name} src={attachmentPreview.url} className="w-full h-full" />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground p-8">
@@ -1022,437 +1316,22 @@ function NewAtrPage() {
                     frameworkRows.map((row, filteredIdx) => {
                       const globalIdx = actions.findIndex((a) => a.id === row.id);
                       const num = globalIdx >= 0 ? globalIdx + 1 : filteredIdx + 1;
-                      const pct = rowCompletionPctForIssue(row);
-                      const maxStudents = students.length;
-
-                      const collapsed = !!collapsedIssueIds[row.id];
-                      const issuePreview =
-                        typeof row.issue === "string" && row.issue.trim()
-                          ? row.issue.trim().slice(0, 72) + (row.issue.trim().length > 72 ? "…" : "")
-                          : null;
-
                       return (
-                        <article
+                        <ActionCard
                           key={row.id}
-                          style={{
-                            animationDelay: `${Math.min(filteredIdx, 10) * 55}ms`,
-                          }}
-                          className={cn(
-                            "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-500 rounded-[1.5rem]",
-                            "border border-growth/15 bg-secondary/35 dark:bg-black/25 backdrop-blur-lg",
-                            "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] hover:shadow-[0_20px_50px_-20px_rgba(45,79,60,0.45)]",
-                            "transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:border-growth/35 hover:ring-1 hover:ring-growth/15",
-                          )}
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-4 p-5 md:p-6 border-b border-growth/10">
-                            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                              <button
-                                type="button"
-                                onClick={() => toggleIssueCollapsed(row.id)}
-                                aria-expanded={!collapsed}
-                                aria-label={collapsed ? "Expand issue" : "Collapse issue"}
-                                className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-growth/20 bg-secondary/40 text-muted-foreground hover:bg-growth/15 hover:text-growth transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
-                              >
-                                <ChevronDown
-                                  className={cn("size-5 transition-transform duration-300", collapsed && "-rotate-90")}
-                                  aria-hidden
-                                />
-                              </button>
-                              <div className="hidden sm:flex size-10 shrink-0 rounded-full bg-growth/10 border border-growth/20 items-center justify-center">
-                                <GripVertical className="size-5 text-muted-foreground opacity-70" aria-hidden />
-                              </div>
-                              <div
-                                className="size-10 shrink-0 rounded-full bg-gradient-to-br from-growth to-growth/70 text-growth-foreground shadow-md shadow-growth/30 flex items-center justify-center font-bold text-sm tabular-nums ring-4 ring-growth/15"
-                                aria-hidden
-                              >
-                                {num}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleIssueCollapsed(row.id)}
-                                aria-expanded={!collapsed}
-                                className="min-w-0 text-left flex-1 rounded-xl px-2 py-0.5 -mx-2 -my-0.5 hover:bg-growth/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40 focus-visible:bg-growth/5"
-                              >
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                                  Issue #{num}
-                                </p>
-                                {collapsed && issuePreview ? (
-                                  <p className="text-[11px] text-foreground/90 line-clamp-2 mt-1 leading-snug max-w-xl">
-                                    {issuePreview}
-                                  </p>
-                                ) : (
-                                  <p className="text-[11px] text-muted-foreground truncate max-w-[200px] sm:max-w-md mt-1">
-                                    {isIssueFullyComplete(row) ? (
-                                      <span className="text-success font-semibold text-xs">
-                                        Marked complete · ready to validate
-                                      </span>
-                                    ) : (
-                                      "Incomplete — refine fields to reach 100%"
-                                    )}
-                                  </p>
-                                )}
-                              </button>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-                              <div className="flex rounded-2xl border border-border/50 bg-secondary/40 p-0.5 shrink-0">
-                                <button
-                                  type="button"
-                                  title="Save note"
-                                  aria-label="Save draft note for this issue"
-                                  onClick={() =>
-                                    toast.success("Progress saved locally. Continue editing — submission happens on Verification.")
-                                  }
-                                  className="p-2.5 rounded-[0.875rem] text-muted-foreground hover:text-growth hover:bg-background/80 transition-colors"
-                                >
-                                  <Save className="size-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  title="Duplicate issue"
-                                  aria-label="Duplicate this issue row"
-                                  onClick={() => duplicateActionRow(row.id)}
-                                  className="p-2.5 rounded-[0.875rem] text-muted-foreground hover:text-growth hover:bg-background/80 transition-colors"
-                                >
-                                  <Copy className="size-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  title="Delete issue"
-                                  aria-label="Delete this issue row"
-                                  onClick={() => setPendingDeleteId(row.id)}
-                                  className="p-2.5 rounded-[0.875rem] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                >
-                                  <Trash2 className="size-4" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Progress */}
-                          <div className={cn("px-5 md:px-6 pt-2", collapsed ? "pb-5 md:pb-5" : "pb-3 md:pb-4")}>
-                            <div className="flex items-center justify-between gap-3 mb-1.5">
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                                Row completeness
-                              </span>
-                              <span className="text-[11px] font-bold tabular-nums text-growth">{pct}%</span>
-                            </div>
-                            <div className="h-2 rounded-full bg-background/70 dark:bg-black/35 overflow-hidden border border-growth/10">
-                              <div
-                                className="h-full rounded-full bg-gradient-to-r from-growth/80 via-growth to-emerald-300/90 transition-[width] duration-700 ease-out shadow-[0_0_14px_rgba(45,79,60,0.45)]"
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          {!collapsed &&
-                          issueRequirementsRevealed[row.id] &&
-                          !isIssueFullyComplete(row) ? (
-                            <div
-                              role="alert"
-                              aria-live="polite"
-                              className="mx-5 md:mx-6 mb-3 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-warning-foreground motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 duration-300"
-                            >
-                              <p className="font-bold flex items-center gap-2 uppercase tracking-[0.12em] text-[10px] mb-2">
-                                <AlertCircle className="size-4 shrink-0 opacity-90" aria-hidden />
-                                Still needed (you pressed Enter to check this issue)
-                              </p>
-                              <ul className="list-disc pl-5 space-y-1 text-[11px] leading-snug">
-                                {missingIssueFieldLabels(row).map((label, li) => (
-                                  <li key={`${label}-${li}`}>{label}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
-
-                          {!collapsed ? (
-                          <div className="px-5 md:px-6 pb-6 md:pb-7 space-y-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 duration-300">
-                            <p className="text-[10px] text-muted-foreground/85 leading-relaxed pb-4 border-b border-border/35">
-                              <span className="font-semibold text-foreground/80">Checking fields:</span> press{" "}
-                              <kbd className="rounded border border-border/60 bg-secondary/80 px-1.5 py-px font-mono text-[10px]">
-                                Enter
-                              </kbd>{" "}
-                              here to see missing items (banner + alert). Use{" "}
-                              <kbd className="rounded border border-border/60 bg-secondary/80 px-1.5 py-px font-mono text-[10px]">
-                                Shift
-                              </kbd>
-                              +
-                              <kbd className="rounded border border-border/60 bg-secondary/80 px-1.5 py-px font-mono text-[10px] ml-px">
-                                Enter
-                              </kbd>{" "}
-                              in large boxes for a new line.
-                            </p>
-                            <div className="relative group">
-                              <label
-                                htmlFor={`issue-${row.id}`}
-                                className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"
-                              >
-                                <AlertCircle className="size-3.5 shrink-0 text-growth/80" aria-hidden />
-                                Issue identified
-                              </label>
-                              <textarea
-                                id={`issue-${row.id}`}
-                                rows={3}
-                                value={row.issue}
-                                placeholder="Clearly describe the learner or cohort issue..."
-                                className={cn(
-                                  "w-full min-h-[5.25rem] rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground/55 resize-none",
-                                  "bg-background/80 dark:bg-black/35 border border-growth/10 shadow-inner transition-[box-shadow,border-color,background]",
-                                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/35 focus-visible:border-growth/40 focus-visible:bg-background",
-                                )}
-                                onChange={(e) => updateActionRow(row.id, "issue", e.target.value)}
-                                onKeyDown={(e) => revealIssueRequirementsOnEnter(e, row, num)}
-                                onInput={(e) => autosizeTextarea(e.target as HTMLTextAreaElement)}
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,280px)_1fr] xl:grid-cols-[260px_minmax(0,1fr)] gap-6">
-                              <div className="space-y-4">
-                                <div>
-                                  <label
-                                    htmlFor={`mentees-${row.id}`}
-                                    className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"
-                                  >
-                                    <UsersIcon className="size-3.5 text-growth/80" aria-hidden />
-                                    Students
-                                  </label>
-                                  <MenteeTagField
-                                    roster={students}
-                                    value={row.taggedStudents ?? []}
-                                    disabled={maxStudents === 0}
-                                    inputId={`mentees-${row.id}`}
-                                    onChange={(tags) => {
-                                      const capped =
-                                        maxStudents > 0 ? tags.slice(0, maxStudents) : tags;
-                                      setActions((prev) =>
-                                        prev.map((a) =>
-                                          a.id === row.id
-                                            ? {
-                                                ...a,
-                                                taggedStudents: capped,
-                                                studentCount: capped.length,
-                                              }
-                                            : a,
-                                        ),
-                                      );
-                                    }}
-                                    onEnterCheck={(e) => revealIssueRequirementsOnEnter(e, row, num)}
-                                  />
-                                  <p className="mt-2 text-[10px] text-muted-foreground leading-relaxed">
-                                    Type <kbd className="px-1 rounded border border-border/60 bg-secondary/80 font-mono">@</kbd>{" "}
-                                    to choose from your My mentee list.{" "}
-                                    {maxStudents > 0 ? (
-                                      <>
-                                        Roster: {maxStudents} · tagged:{" "}
-                                        {(row.taggedStudents ?? []).length}
-                                      </>
-                                    ) : (
-                                      <>Add mentees under My mentee or import the attendance sheet on this page.</>
-                                    )}
-                                  </p>
-                                </div>
-
-                                <div>
-                                  <label
-                                    htmlFor={`timeline-${row.id}`}
-                                    className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"
-                                  >
-                                    <CalendarDays className="size-3.5 text-growth/80" aria-hidden />
-                                    Timeline & milestones
-                                  </label>
-                                  <input
-                                    id={`timeline-${row.id}`}
-                                    type="text"
-                                    value={row.timeline}
-                                    onChange={(e) => updateActionRow(row.id, "timeline", e.target.value)}
-                                    placeholder="e.g. Follow-up cadence · Week 6 lab window…"
-                                    className={cn(
-                                      "w-full rounded-2xl px-4 py-3 text-sm bg-background/80 dark:bg-black/35 border border-growth/10 shadow-inner placeholder:text-muted-foreground/55",
-                                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/35 focus-visible:border-growth/40",
-                                    )}
-                                    onKeyDown={(e) => revealIssueRequirementsOnEnter(e, row, num)}
-                                  />
-                                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                                    {TIMELINE_MILESTONES.map((m) => (
-                                      <button
-                                        key={m}
-                                        type="button"
-                                        className={cn(
-                                          "px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border transition-all",
-                                          row.timeline === m
-                                            ? "bg-growth/15 border-growth/40 text-growth"
-                                            : "bg-secondary/35 border-transparent text-muted-foreground hover:border-growth/25 hover:bg-growth/5",
-                                        )}
-                                        onClick={() => updateActionRow(row.id, "timeline", m)}
-                                      >
-                                        {m}
-                                      </button>
-                                    ))}
-                                    <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-secondary/30 border border-growth/10">
-                                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
-                                        Date anchor
-                                      </span>
-                                      <input
-                                        type="date"
-                                        aria-label="Milestone calendar date"
-                                        value={
-                                          typeof row.timeline === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.timeline)
-                                            ? row.timeline
-                                            : ""
-                                        }
-                                        onChange={(e) => {
-                                          const v = e.target.value;
-                                          if (!v) return;
-                                          updateActionRow(row.id, "timeline", v);
-                                        }}
-                                        className={cn(
-                                          "bg-transparent border-none text-[11px] font-medium rounded-lg py-0.5 px-1",
-                                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/30 cursor-pointer max-w-[8.75rem]",
-                                        )}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="space-y-5">
-                                <div className="relative">
-                                  <label
-                                    htmlFor={`action-${row.id}`}
-                                    className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"
-                                  >
-                                    <ListChecks className="size-3.5 text-growth/80" aria-hidden />
-                                    Action taken
-                                  </label>
-                                  <textarea
-                                    id={`action-${row.id}`}
-                                    rows={3}
-                                    value={row.actionTaken}
-                                    placeholder="Intervention steps, conversations, escalation path…"
-                                    className={cn(
-                                      "w-full min-h-[5.75rem] rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground/55 resize-none",
-                                      "bg-background/80 dark:bg-black/35 border border-growth/10 shadow-inner transition-[box-shadow,border-color,background]",
-                                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/35 focus-visible:border-growth/40",
-                                    )}
-                                    onChange={(e) => updateActionRow(row.id, "actionTaken", e.target.value)}
-                                    onKeyDown={(e) => revealIssueRequirementsOnEnter(e, row, num)}
-                                    onInput={(e) => autosizeTextarea(e.target as HTMLTextAreaElement)}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label
-                                    htmlFor={`outcome-${row.id}`}
-                                    className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"
-                                  >
-                                    <Sparkles className="size-3.5 text-growth/80" aria-hidden />
-                                    Outcome / impact
-                                  </label>
-                                  <textarea
-                                    id={`outcome-${row.id}`}
-                                    rows={2}
-                                    value={row.outcome}
-                                        placeholder="Quantify or qualify results — retention, morale, competency lift…"
-                                    className={cn(
-                                      "w-full min-h-[4.75rem] rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground/55 resize-none",
-                                      "bg-background/80 dark:bg-black/35 border border-growth/10 shadow-inner transition-[box-shadow]",
-                                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/35 focus-visible:border-growth/40 focus-visible:bg-background",
-                                    )}
-                                    onChange={(e) => updateActionRow(row.id, "outcome", e.target.value)}
-                                    onKeyDown={(e) => revealIssueRequirementsOnEnter(e, row, num)}
-                                    onInput={(e) => autosizeTextarea(e.target as HTMLTextAreaElement)}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Evidence */}
-                            <div className="pt-3">
-                              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground flex items-center gap-2">
-                                <Paperclip className="size-3.5 text-growth/80" aria-hidden />
-                                Supporting evidence
-                              </p>
-                              <div
-                                role="presentation"
-                                onDragOver={(e) => {
-                                  e.preventDefault();
-                                  setEvidenceDragRowId(row.id);
-                                }}
-                                onDragLeave={(e) => {
-                                  if (!e.currentTarget.contains(e.relatedTarget as Node))
-                                    setEvidenceDragRowId((id) => (id === row.id ? null : id));
-                                }}
-                                onDrop={(e) => {
-                                  e.preventDefault();
-                                  setEvidenceDragRowId(null);
-                                  const dropped = Array.from(e.dataTransfer.files || []);
-                                  if (dropped.length) addEvidenceFilesToRow(row.id, dropped);
-                                }}
-                                className={cn(
-                                  "rounded-[1.25rem] border-2 border-dashed transition-colors duration-300 p-4 md:p-5",
-                                  evidenceDragRowId === row.id
-                                    ? "border-growth bg-growth/15 scale-[1.01]"
-                                    : "border-growth/25 bg-secondary/20 hover:bg-growth/5 hover:border-growth/40",
-                                )}
-                              >
-                                <label className="flex flex-col items-center justify-center cursor-pointer gap-3 py-2">
-                                  <div className="size-14 rounded-2xl border border-growth/20 bg-growth/10 flex items-center justify-center shadow-inner">
-                                    <Upload className="size-6 text-growth" />
-                                  </div>
-                                  <div className="text-center">
-                                    <span className="text-xs font-semibold block">Drag & drop or browse</span>
-                                    <span className="text-[10px] text-muted-foreground mt-1 font-medium uppercase tracking-wide">
-                                      PDF · Word · Images
-                                    </span>
-                                  </div>
-                                  <input
-                                    type="file"
-                                    multiple
-                                    accept=".pdf,.doc,.docx,image/*"
-                                    onChange={(e) => handleRowFileUpload(row.id, e)}
-                                    className="hidden"
-                                  />
-                                </label>
-
-                                {(row.evidenceFiles || []).length > 0 ? (
-                                  <ul className="mt-4 flex flex-wrap gap-2 border-t border-growth/10 pt-4">
-                                    {(row.evidenceFiles || []).map((file: { name: string; type?: string; dataUrl?: string }, fIdx: number) => (
-                                      <li
-                                        key={`${file.name}-${fIdx}`}
-                                        className="group/file flex items-center gap-2 pl-3 pr-1 py-2 rounded-xl border border-growth/15 bg-growth/5 min-w-0 max-w-[200px]"
-                                      >
-                                        <FileCheck className="size-3.5 shrink-0 text-growth" />
-                                        <button
-                                          type="button"
-                                          title="Preview attachment"
-                                          onClick={() =>
-                                            openAttachmentPreview({
-                                              name: file.name,
-                                              type: file.type,
-                                              dataUrl: file.dataUrl,
-                                            })
-                                          }
-                                          className="truncate text-[10px] font-bold text-left underline-offset-2 hover:underline hover:text-growth min-w-0 text-growth/90 transition-colors flex-1"
-                                        >
-                                          {file.name}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          aria-label="Remove attachment"
-                                          onClick={() => removeRowFile(row.id, fIdx)}
-                                          className="shrink-0 p-2 rounded-lg text-muted-foreground hover:bg-destructive/15 hover:text-destructive opacity-70 group-hover/file:opacity-100 transition-colors"
-                                        >
-                                          <X className="size-3.5" />
-                                        </button>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                          ) : null}
-                        </article>
+                          row={row}
+                          num={num}
+                          students={students}
+                          collapsed={!!collapsedIssueIds[row.id]}
+                          requirementsRevealed={!!issueRequirementsRevealed[row.id]}
+                          onToggleCollapse={toggleIssueCollapsed}
+                          onUpdate={updateActionRow}
+                          onDuplicate={duplicateActionRow}
+                          onDelete={setPendingDeleteId}
+                          onRevealRequirements={revealIssueRequirementsOnEnter}
+                          onAddEvidence={addEvidenceFilesToRow}
+                          onOpenPreview={openAttachmentPreview}
+                        />
                       );
                     })
                   )}

@@ -70,6 +70,12 @@ function iqacScanMerge(local: AtrReport, remote: AtrReport) {
   return remote.iqacSignedScan ?? local.iqacSignedScan;
 }
 
+function hasPayloads(report: AtrReport): boolean {
+  const hasA = (report.attachments ?? []).some((a) => !!a.dataUrl);
+  const hasE = (report.actions ?? []).some((a) => (a.evidenceFiles ?? []).some((f) => !!f.dataUrl));
+  return hasA || hasE;
+}
+
 /** Prefer server rejection; never let a phantom local REJECTED beat a progressed server row. */
 function pickMoreAdvancedReport(local: AtrReport, remote: AtrReport): AtrReport {
   if (remote.status === "rejected") {
@@ -110,11 +116,22 @@ function pickMoreAdvancedReport(local: AtrReport, remote: AtrReport): AtrReport 
   const rr = atrStatusAdvanceRank(remote.status);
 
   let winner = remote;
-  if (rl > rr) winner = local;
-  else if (rl === rr) {
-    const tl = local.timeline?.length ?? 0;
-    const tr = remote.timeline?.length ?? 0;
-    winner = tr >= tl ? remote : local;
+  if (rl > rr) {
+    winner = local;
+  } else if (rl === rr) {
+    // Same status: prefer the one with attachment payloads (sanitization check)
+    const lp = hasPayloads(local);
+    const rp = hasPayloads(remote);
+    if (lp && !rp) {
+      winner = local;
+    } else if (!lp && rp) {
+      winner = remote;
+    } else {
+      // Both full or both sanitized: prefer more content/newer
+      const tl = local.timeline?.length ?? 0;
+      const tr = remote.timeline?.length ?? 0;
+      winner = tr >= tl ? remote : local;
+    }
   }
 
   return {
@@ -174,29 +191,36 @@ function read(): AtrReport[] {
 }
 
 function write(items: AtrReport[]) {
-  const lean = items.map(sanitizeReportForStorage);
-  const payload = JSON.stringify(lean);
   try {
-    localStorage.setItem(KEY, payload);
-  } catch (e) {
-    if (e instanceof DOMException && e.name === "QuotaExceededError") {
-      try {
-        localStorage.removeItem(KEY);
-        localStorage.setItem(KEY, JSON.stringify(lean.slice(0, 15)));
-      } catch {
+    const payload = JSON.stringify(items);
+    const lean = items.map(sanitizeReportForStorage);
+    try {
+      localStorage.setItem(KEY, payload);
+    } catch (e) {
+      const isQuota =
+        e instanceof DOMException &&
+        (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED" || e.code === 22);
+      if (isQuota) {
         try {
-          localStorage.setItem(KEY, JSON.stringify(lean.slice(0, 5)));
+          // Fallback mode for storage pressure: keep recent ATR metadata only.
+          localStorage.removeItem(KEY);
+          localStorage.setItem(KEY, JSON.stringify(lean.slice(0, 15)));
         } catch {
-          throw new Error(
-            "Browser storage is full. Clear site data for this origin or remove old ATRs, then submit again.",
-          );
+          try {
+            localStorage.setItem(KEY, JSON.stringify(lean.slice(0, 5)));
+          } catch {
+            // Last resort: just metadata without even the 5 items if they are huge
+            localStorage.setItem(KEY, JSON.stringify([]));
+          }
         }
+      } else {
+        throw e;
       }
-    } else {
-      throw e;
     }
+    window.dispatchEvent(new Event(EVT));
+  } catch (err) {
+    console.error("Local storage write failed", err);
   }
-  window.dispatchEvent(new Event(EVT));
 }
 
 export function listReports(): AtrReport[] {
@@ -271,8 +295,8 @@ export async function createReport(input: Omit<AtrReport, "id" | "status" | "tim
   const next = [report, ...items];
   write(next);
 
-  // Async background sync (full report including evidence payloads when present)
-  saveAtrFn({ data: report }).catch(console.error);
+  // Persist immediately so downstream review actions don't race against a missing server row.
+  await saveAtrFn({ data: report });
 
   return report;
 }
