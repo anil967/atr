@@ -46,6 +46,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const homeRoute = getHomeRouteForRole(user.role);
   const navItems: NavItem[] = [
     { to: homeRoute, label: `${ROLE_LABELS[user.role]} Home`, icon: LayoutDashboard },
+    ...(user.role === "admin"
+      ? [{ to: "/user-management", label: "User Management", icon: Users }]
+      : []),
     ...(user.role === "chief_mentor"
       ? [{ to: "/approvals", label: "Approvals", icon: UserCheck }]
       : []),

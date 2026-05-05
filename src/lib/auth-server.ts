@@ -75,6 +75,17 @@ export interface SignupApprovalSummary {
   approvedUsers: ApprovedUser[];
 }
 
+export interface AdminManagedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  department: string;
+  disabled?: boolean;
+  approvalStatus?: string;
+  approvedAt?: string | null;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function handleSupabaseError(error: any): never {
@@ -191,6 +202,74 @@ export const deleteUserFn = createServerFn({ method: "POST" })
     const { error } = await sb.from("users").delete().eq("id", data.userId);
     if (error) handleSupabaseError(error);
     return { ok: true };
+  });
+
+/** Admin-only: create a user directly (approved), bypassing pending signup queue. */
+export const createUserByAdminFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: any }) => {
+    if (data?.actorRole !== "admin") throw new Error("Only admin can add users");
+    const sb = getSupabase();
+    const email = String(data.email ?? "").toLowerCase().trim();
+    const name = String(data.name ?? "").trim();
+    const role = String(data.role ?? "") as Role;
+    const department = String(data.department ?? "").trim();
+    const password = String(data.password ?? "");
+
+    if (!email || !name || !department || !password) {
+      throw new Error("Name, email, department and password are required");
+    }
+    if (!["mentor", "coordinator", "hod", "chief_mentor", "admin"].includes(role)) {
+      throw new Error("Invalid role");
+    }
+
+    const { data: existing } = await sb
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (existing) throw new Error("A user with this email already exists");
+
+    if (role === "hod") {
+      await assertSingleActiveHodPerDepartment(sb, department);
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const { error } = await sb.from("users").insert({
+      name,
+      email,
+      password_hash: passwordHash,
+      role,
+      department,
+      disabled: false,
+      approval_status: "approved",
+      approved_at: new Date().toISOString(),
+    });
+    if (error) handleSupabaseError(error);
+    return { ok: true as const };
+  });
+
+/** Admin-only: list all users for direct create/remove management. */
+export const getAllUsersForAdminFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: any }) => {
+    if (data?.actorRole !== "admin") throw new Error("Only admin can view all users");
+    const sb = getSupabase();
+    const { data: rows, error } = await sb
+      .from("users")
+      .select("id, name, email, role, department, disabled, approval_status, approved_at")
+      .order("created_at", { ascending: false });
+    if (error) handleSupabaseError(error);
+    return (rows ?? []).map(
+      (r): AdminManagedUser => ({
+        id: String(r.id),
+        name: String(r.name),
+        email: String(r.email),
+        role: r.role as Role,
+        department: String(r.department ?? ""),
+        disabled: r.disabled === true,
+        approvalStatus: String(r.approval_status ?? ""),
+        approvedAt: r.approved_at ? new Date(r.approved_at).toISOString() : null,
+      }),
+    );
   });
 
 // ── Admin/Approval Functions ──────────────────────────────────────────────────

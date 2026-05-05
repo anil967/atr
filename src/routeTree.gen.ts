@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UserManagementRouteImport } from './routes/user-management'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as NotificationsRouteImport } from './routes/notifications'
@@ -24,6 +25,11 @@ import { Route as AtrsIndexRouteImport } from './routes/atrs.index'
 import { Route as AtrsNewRouteImport } from './routes/atrs.new'
 import { Route as AtrsAtrIdRouteImport } from './routes/atrs.$atrId'
 
+const UserManagementRoute = UserManagementRouteImport.update({
+  id: '/user-management',
+  path: '/user-management',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TeamRoute = TeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof NotificationsRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
+  '/user-management': typeof UserManagementRoute
   '/atrs/$atrId': typeof AtrsAtrIdRoute
   '/atrs/new': typeof AtrsNewRoute
   '/atrs/': typeof AtrsIndexRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof NotificationsRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
+  '/user-management': typeof UserManagementRoute
   '/atrs/$atrId': typeof AtrsAtrIdRoute
   '/atrs/new': typeof AtrsNewRoute
   '/atrs': typeof AtrsIndexRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/notifications': typeof NotificationsRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
+  '/user-management': typeof UserManagementRoute
   '/atrs/$atrId': typeof AtrsAtrIdRoute
   '/atrs/new': typeof AtrsNewRoute
   '/atrs/': typeof AtrsIndexRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/signup'
     | '/team'
+    | '/user-management'
     | '/atrs/$atrId'
     | '/atrs/new'
     | '/atrs/'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/signup'
     | '/team'
+    | '/user-management'
     | '/atrs/$atrId'
     | '/atrs/new'
     | '/atrs'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/signup'
     | '/team'
+    | '/user-management'
     | '/atrs/$atrId'
     | '/atrs/new'
     | '/atrs/'
@@ -207,6 +219,7 @@ export interface RootRouteChildren {
   NotificationsRoute: typeof NotificationsRoute
   SignupRoute: typeof SignupRoute
   TeamRoute: typeof TeamRoute
+  UserManagementRoute: typeof UserManagementRoute
   AtrsAtrIdRoute: typeof AtrsAtrIdRoute
   AtrsNewRoute: typeof AtrsNewRoute
   AtrsIndexRoute: typeof AtrsIndexRoute
@@ -214,6 +227,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/user-management': {
+      id: '/user-management'
+      path: '/user-management'
+      fullPath: '/user-management'
+      preLoaderRoute: typeof UserManagementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/team': {
       id: '/team'
       path: '/team'
@@ -327,6 +347,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotificationsRoute: NotificationsRoute,
   SignupRoute: SignupRoute,
   TeamRoute: TeamRoute,
+  UserManagementRoute: UserManagementRoute,
   AtrsAtrIdRoute: AtrsAtrIdRoute,
   AtrsNewRoute: AtrsNewRoute,
   AtrsIndexRoute: AtrsIndexRoute,

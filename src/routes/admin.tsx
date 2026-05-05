@@ -122,6 +122,7 @@ function AdminPage() {
             </div>
           </section>
         </div>
+
       </div>
     </AppShell>
   );

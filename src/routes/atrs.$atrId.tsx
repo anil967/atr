@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Clock,
   FileCheck,
+  FileText,
   ListChecks,
   Paperclip,
   FileDown,
@@ -170,6 +171,18 @@ function StudentDetailFields({ s }: { s: ParsedStudent }) {
   );
 }
 
+function attachmentHasPayload(a: Pick<AtrAttachment, "dataUrl">): boolean {
+  return typeof a.dataUrl === "string" && a.dataUrl.trim().length > 0;
+}
+
+function attachmentKind(a: Pick<AtrAttachment, "type" | "dataUrl">): "image" | "pdf" | "file" {
+  const fromType = (a.type ?? "").toLowerCase();
+  const fromDataUrl = (a.dataUrl ?? "").toLowerCase();
+  if (fromType.startsWith("image/") || fromDataUrl.startsWith("data:image/")) return "image";
+  if (fromType.includes("pdf") || fromDataUrl.startsWith("data:application/pdf")) return "pdf";
+  return "file";
+}
+
 function actionRowReviewPct(action: ActionItem) {
   let n = 0;
   if (String(action.issue ?? "").trim()) n++;
@@ -256,6 +269,7 @@ function AtrDetailPage() {
   /** Parsed mentee row for dialog — merged from issue tag + report roster when rolls match. */
   const [studentDetail, setStudentDetail] = useState<ParsedStudent | null>(null);
   const attachmentBlobUrlRef = useRef<string | null>(null);
+  const missingAttachmentNoticeShownRef = useRef<Set<string>>(new Set());
   const iqacScanInputRef = useRef<HTMLInputElement>(null);
 
   /** Chosen scanned file (IQAC finalize step — not persisted until Submit). */
@@ -271,10 +285,12 @@ function AtrDetailPage() {
 
   const handleOpenAttachment = (attachment: AtrAttachment) => {
     closeAttachmentPreview();
-    if (!attachment.dataUrl) {
-      toast.error(
-        "Preview not available — wait for sync or the file may only have metadata saved locally.",
-      );
+    if (!attachmentHasPayload(attachment)) {
+      const key = `${attachment.name}__${attachment.size}`;
+      if (!missingAttachmentNoticeShownRef.current.has(key)) {
+        missingAttachmentNoticeShownRef.current.add(key);
+        toast.info("File is still syncing. Please try again in a moment.");
+      }
       return;
     }
     try {
@@ -1196,25 +1212,35 @@ function AtrDetailPage() {
                                   Supporting evidence
                                 </p>
                                 <ul className="flex flex-wrap gap-2">
-                                  {(row.evidenceFiles ?? []).map((file, fIdx) => (
-                                    <li key={`${file.name}-${fIdx}`}>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleOpenAttachment({
-                                            name: file.name,
-                                            size: file.size,
-                                            type: file.type,
-                                            dataUrl: file.dataUrl,
-                                          })
-                                        }
-                                        className="inline-flex items-center gap-2 pl-3 pr-3 py-2 rounded-xl border border-growth/15 bg-growth/5 hover:bg-growth/10 hover:border-growth/30 transition-colors text-left max-w-[220px]"
-                                      >
-                                        <FileCheck className="size-3.5 shrink-0 text-growth" aria-hidden />
-                                        <span className="truncate text-[10px] font-bold">{file.name}</span>
-                                      </button>
-                                    </li>
-                                  ))}
+                                  {(row.evidenceFiles ?? []).map((file, fIdx) => {
+                                    const hasPayload = attachmentHasPayload(file);
+                                    return (
+                                      <li key={`${file.name}-${fIdx}`}>
+                                        <button
+                                          type="button"
+                                          disabled={!hasPayload}
+                                          onClick={() =>
+                                            handleOpenAttachment({
+                                              name: file.name,
+                                              size: file.size,
+                                              type: file.type,
+                                              dataUrl: file.dataUrl,
+                                            })
+                                          }
+                                          className={cn(
+                                            "inline-flex items-center gap-2 pl-3 pr-3 py-2 rounded-xl border transition-colors text-left max-w-[220px]",
+                                            hasPayload
+                                              ? "border-growth/15 bg-growth/5 hover:bg-growth/10 hover:border-growth/30"
+                                              : "border-border/60 bg-muted/30 text-muted-foreground cursor-not-allowed",
+                                          )}
+                                          title={hasPayload ? "Open file preview" : "File is still syncing"}
+                                        >
+                                          <FileCheck className="size-3.5 shrink-0 text-growth" aria-hidden />
+                                          <span className="truncate text-[10px] font-bold">{file.name}</span>
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               </div>
                             ) : null}
@@ -1300,57 +1326,99 @@ function AtrDetailPage() {
                 <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground mb-4">
                   Attachments
                 </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {report.attachments.map((a, i) => (
-                    <button
-                      key={`${a.name}-${i}`}
-                      type="button"
-                      onClick={() => handleOpenAttachment(a)}
-                      className="text-left rounded-xl border border-border overflow-hidden bg-secondary/30 hover:border-growth/50 hover:bg-secondary/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
-                    >
-                      {a.dataUrl ? (
-                        <img src={a.dataUrl} alt="" className="w-full h-32 object-cover pointer-events-none" />
-                      ) : (
-                        <div className="w-full h-32 flex items-center justify-center text-muted-foreground">
-                          <Paperclip className="size-8" />
+                <div className="flex flex-wrap gap-3">
+                  {report.attachments.map((a, i) => {
+                    const hasPayload = attachmentHasPayload(a);
+                    const kind = attachmentKind(a);
+                    const showImage = hasPayload && kind === "image";
+                    return (
+                      <button
+                        key={`${a.name}-${i}`}
+                        type="button"
+                        disabled={!hasPayload}
+                        onClick={() => handleOpenAttachment(a)}
+                        className={cn(
+                          "w-[200px] text-left rounded-2xl border overflow-hidden shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40",
+                          hasPayload
+                            ? "border-border/70 bg-card hover:border-growth/45 hover:shadow-md hover:-translate-y-0.5"
+                            : "border-border/60 bg-muted/25 text-muted-foreground cursor-not-allowed",
+                        )}
+                        title={hasPayload ? "Open file preview" : "File is still syncing"}
+                      >
+                        {showImage ? (
+                          <img src={a.dataUrl} alt="" className="w-full h-32 object-cover pointer-events-none" />
+                        ) : (
+                          <div className="w-full h-32 flex items-center justify-center text-muted-foreground bg-gradient-to-br from-muted/50 to-muted/20">
+                            {kind === "pdf" ? (
+                              <div className="size-11 rounded-xl bg-red-500/12 text-red-600 flex items-center justify-center">
+                                <FileText className="size-7" />
+                              </div>
+                            ) : (
+                              <Paperclip className="size-8" />
+                            )}
+                          </div>
+                        )}
+                        <div className="p-3 bg-surface">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-growth/90 mb-0.5">
+                            Report
+                          </p>
+                          <p className="text-[11px] font-medium truncate">{a.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {(a.size / 1024).toFixed(1)} KB
+                          </p>
+                          {!hasPayload ? (
+                            <p className="text-[10px] text-amber-700/90 mt-1">Sync pending</p>
+                          ) : null}
                         </div>
-                      )}
-                      <div className="p-2.5 bg-surface">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-growth/90 mb-0.5">
-                          Report
-                        </p>
-                        <p className="text-[11px] font-medium truncate">{a.name}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {(a.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                  {issueEvidenceForGallery.map(({ file, issueIndex, key }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => handleOpenAttachment(file)}
-                      className="text-left rounded-xl border border-border overflow-hidden bg-secondary/30 hover:border-growth/50 hover:bg-secondary/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
-                    >
-                      {file.dataUrl ? (
-                        <img src={file.dataUrl} alt="" className="w-full h-32 object-cover pointer-events-none" />
-                      ) : (
-                        <div className="w-full h-32 flex items-center justify-center text-muted-foreground">
-                          <Paperclip className="size-8" />
+                      </button>
+                    );
+                  })}
+                  {issueEvidenceForGallery.map(({ file, issueIndex, key }) => {
+                    const hasPayload = attachmentHasPayload(file);
+                    const kind = attachmentKind(file);
+                    const showImage = hasPayload && kind === "image";
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={!hasPayload}
+                        onClick={() => handleOpenAttachment(file)}
+                        className={cn(
+                          "w-[200px] text-left rounded-2xl border overflow-hidden shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40",
+                          hasPayload
+                            ? "border-border/70 bg-card hover:border-growth/45 hover:shadow-md hover:-translate-y-0.5"
+                            : "border-border/60 bg-muted/25 text-muted-foreground cursor-not-allowed",
+                        )}
+                        title={hasPayload ? "Open file preview" : "File is still syncing"}
+                      >
+                        {showImage ? (
+                          <img src={file.dataUrl} alt="" className="w-full h-32 object-cover pointer-events-none" />
+                        ) : (
+                          <div className="w-full h-32 flex items-center justify-center text-muted-foreground bg-gradient-to-br from-muted/50 to-muted/20">
+                            {kind === "pdf" ? (
+                              <div className="size-11 rounded-xl bg-red-500/12 text-red-600 flex items-center justify-center">
+                                <FileText className="size-7" />
+                              </div>
+                            ) : (
+                              <Paperclip className="size-8" />
+                            )}
+                          </div>
+                        )}
+                        <div className="p-3 bg-surface">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-growth/90 mb-0.5">
+                            Issue #{issueIndex}
+                          </p>
+                          <p className="text-[11px] font-medium truncate">{file.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {(file.size / 1024).toFixed(1)} KB
+                          </p>
+                          {!hasPayload ? (
+                            <p className="text-[10px] text-amber-700/90 mt-1">Sync pending</p>
+                          ) : null}
                         </div>
-                      )}
-                      <div className="p-2.5 bg-surface">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-growth/90 mb-0.5">
-                          Issue #{issueIndex}
-                        </p>
-                        <p className="text-[11px] font-medium truncate">{file.name}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {(file.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               </section>
             ) : null}
