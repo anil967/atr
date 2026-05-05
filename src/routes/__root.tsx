@@ -42,7 +42,7 @@ export const Route = createRootRoute({
       { property: "og:title", content: "BCET ATR — Action Taken Report Management" },
       {
         property: "og:description",
-        content: "Multi-level ATR workflow for Bengal College of Engineering and Technology.",
+        content: "Multi-level ATR workflow for Balasore College of Engineering and Technology.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

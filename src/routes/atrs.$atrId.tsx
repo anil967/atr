@@ -1097,7 +1097,7 @@ function AtrDetailPage() {
                 {reportActions.length ? (
                   reportActions.map((row, idx) => {
                     const rowKey = row.id ?? `row-${idx}`;
-                    const collapsed = !!collapsedActionKeys[rowKey];
+                    const isCollapsed = collapsedActionKeys[rowKey] ?? !isReviewer;
                     const pct = actionRowReviewPct(row);
                     const preview =
                       String(row.issue ?? "").trim().slice(0, 96) +
@@ -1119,15 +1119,15 @@ function AtrDetailPage() {
                               onClick={() =>
                                 setCollapsedActionKeys((p) => ({
                                   ...p,
-                                  [rowKey]: !p[rowKey],
+                                  [rowKey]: !isCollapsed,
                                 }))
                               }
-                              aria-expanded={!collapsed}
-                              aria-label={collapsed ? "Expand issue details" : "Collapse issue details"}
+                              aria-expanded={!isCollapsed}
+                              aria-label={isCollapsed ? "Expand issue details" : "Collapse issue details"}
                               className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-growth/20 bg-secondary/40 text-muted-foreground hover:bg-growth/15 hover:text-growth transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
                             >
                               <ChevronDown
-                                className={cn("size-5 transition-transform duration-300", collapsed && "-rotate-90")}
+                                className={cn("size-5 transition-transform duration-300", isCollapsed && "-rotate-90")}
                                 aria-hidden
                               />
                             </button>
@@ -1145,7 +1145,7 @@ function AtrDetailPage() {
                               onClick={() =>
                                 setCollapsedActionKeys((p) => ({
                                   ...p,
-                                  [rowKey]: !p[rowKey],
+                                  [rowKey]: !isCollapsed,
                                 }))
                               }
                               className="min-w-0 text-left rounded-xl px-2 py-0.5 -mx-2 hover:bg-growth/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
@@ -1153,13 +1153,13 @@ function AtrDetailPage() {
                               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                                 Issue #{idx + 1}
                               </p>
-                              {collapsed && preview ? (
+                              {isCollapsed && preview ? (
                                 <p className="text-[11px] text-foreground/90 line-clamp-2 mt-1 leading-snug max-w-xl">
                                   {preview}
                                 </p>
                               ) : (
                                 <p className="text-[11px] text-muted-foreground mt-1">
-                                  Expand to read actions, timeline, outcome, and evidence.
+                                  {isCollapsed ? "Expand to read details." : "Collapse to hide narrative and evidence."}
                                 </p>
                               )}
                             </button>
@@ -1181,7 +1181,7 @@ function AtrDetailPage() {
                           </div>
                         </div>
 
-                        {!collapsed ? (
+                        {!isCollapsed ? (
                           <div className="px-5 md:px-6 pb-6 md:pb-7 space-y-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 duration-300">
                             <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3 text-sm whitespace-pre-wrap">
                               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2">

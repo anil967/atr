@@ -416,7 +416,6 @@ function ApprovalsPage() {
                     <th className="px-6 py-3 text-xs font-semibold text-muted-foreground">
                       {statusTab === "approved" ? "Approved At" : "Status"}
                     </th>
-                    <th className="px-6 py-3 text-xs font-semibold text-muted-foreground text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -432,15 +431,6 @@ function ApprovalsPage() {
                       <td className="px-6 py-3">{u.department}</td>
                       <td className="px-6 py-3 text-muted-foreground">
                         {u.approvedAt ? format(new Date(u.approvedAt), "MMM d, yyyy") : "—"}
-                      </td>
-                      <td className="px-6 py-3 text-right">
-                        <button
-                          onClick={() => handleDeleteUser(u.id)}
-                          disabled={actionLoadingId === u.id}
-                          className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -476,7 +466,6 @@ function ApprovalsPage() {
                     <th className="px-6 py-3 text-xs font-semibold text-muted-foreground">
                       Approved At
                     </th>
-                    <th className="px-6 py-3 text-xs font-semibold text-muted-foreground text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -503,15 +492,6 @@ function ApprovalsPage() {
                           {u.approvedAt
                             ? format(new Date(u.approvedAt), "MMM d, yyyy h:mm a")
                             : "—"}
-                        </td>
-                        <td className="px-6 py-3 text-right">
-                          <button
-                            onClick={() => handleDeleteUser(u.id)}
-                            disabled={actionLoadingId === u.id}
-                            className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
                         </td>
                       </tr>
                     ))

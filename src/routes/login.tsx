@@ -248,7 +248,7 @@ function LoginPage() {
               Trouble signing in? Contact your system administrator.
               <br />
               <span className="opacity-60">
-                BCET ATR System · Bengal College of Engineering & Technology
+                BCET ATR System · Balasore College of Engineering and Technology
               </span>
             </p>
             <p className="text-sm text-center text-muted-foreground mt-4">
