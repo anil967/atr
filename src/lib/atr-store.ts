@@ -235,6 +235,31 @@ export async function createReport(input: Omit<AtrReport, "id" | "status" | "tim
         `You can create at most ${MAX_ATR_PER_ACADEMIC_YEAR} ATRs per academic year. Choose another year or complete existing reports first.`,
       );
     }
+    if (input.session) {
+      const usedThisSession = items.filter(
+        (r) =>
+          r.mentorId === input.mentorId &&
+          (r.academicYear ?? "").trim() === ay &&
+          r.session === input.session,
+      ).length;
+      if (usedThisSession >= 2) {
+        throw new Error("Only 2 ATRs are allowed per session in the selected academic year.");
+      }
+    }
+    if (input.session && input.atrNo) {
+      const duplicateSlot = items.some(
+        (r) =>
+          r.mentorId === input.mentorId &&
+          (r.academicYear ?? "").trim() === ay &&
+          r.session === input.session &&
+          r.atrNo === input.atrNo,
+      );
+      if (duplicateSlot) {
+        throw new Error(
+          `Session ${input.session === "session_1" ? "1" : "2"} ATR ${input.atrNo} already exists for this academic year.`,
+        );
+      }
+    }
   }
   const year = new Date().getFullYear();
   const deptSeg = departmentReferenceCode(input.department).toLowerCase();

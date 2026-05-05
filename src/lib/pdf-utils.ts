@@ -445,6 +445,11 @@ export async function generateAtrPdf(
 
   // Second metadata row: Mentor / Department / Timeline
   if (!standaloneCoordinatorValidationPdf) {
+    const sessionText =
+      report.session === "session_1" ? "Session 1" : report.session === "session_2" ? "Session 2" : "—";
+    const atrNoText = report.atrNo ? `ATR ${report.atrNo}` : "—";
+    const sessionAtrText = `${sessionText} · ${atrNoText}`;
+
     doc.setFillColor(248, 250, 252);
     doc.roundedRect(ML - 2, y - 5, pageWidth - ML * 2 + 4, 14, 1, 1, "F");
     sectionDivider(doc, y - 5,  ML - 2, MR + 2, 0.2);
@@ -453,22 +458,22 @@ export async function generateAtrPdf(
     if (standaloneChiefMentorValidationPdf && chiefPdf) {
       metaCol(doc, "CHIEF MENTOR",   chiefPdf.chiefMentorName, ML, y);
       metaCol(
-        doc, "CYCLE TIMELINE",
-        `${format(new Date(report.startDate), "MMM d")} – ${format(new Date(report.endDate), "MMM d, yyyy")}`,
+        doc, "SESSION / ATR NO",
+        sessionAtrText,
         MR, y, "right",
       );
     } else if (standaloneHodValidationPdf) {
       metaCol(
-        doc, "CYCLE TIMELINE",
-        `${format(new Date(report.startDate), "MMM d")} – ${format(new Date(report.endDate), "MMM d, yyyy")}`,
+        doc, "SESSION / ATR NO",
+        sessionAtrText,
         MR, y, "right",
       );
     } else {
       metaCol(doc, "MENTOR NAME",  report.mentorName,                              ML,  y);
       metaCol(doc, "DEPARTMENT",   departmentReferenceCode(report.department),     CX,  y, "center");
       metaCol(
-        doc, "CYCLE TIMELINE",
-        `${format(new Date(report.startDate), "MMM d")} – ${format(new Date(report.endDate), "MMM d, yyyy")}`,
+        doc, "SESSION / ATR NO",
+        sessionAtrText,
         MR, y, "right",
       );
     }
@@ -677,11 +682,15 @@ export async function generateAtrPdf(
   const appendHodAuditFront = (): void => {
     if (!hodForFront) return;
 
-    if (y > pageHeight - 125) { doc.addPage(); y = 25; }
-    else { y += 10; }
-
-    sectionDivider(doc, y - 3, ML, MR);
-    y += 8;
+    if (y > pageHeight - 125) {
+      doc.addPage();
+      y = 25;
+    } else if (!standaloneHodValidationPdf) {
+      // Only add divider and extra spacing if not a standalone report
+      y += 10;
+      sectionDivider(doc, y - 3, ML, MR);
+      y += 8;
+    }
 
     sectionHeading(doc, "1.  HOD VALIDATION CHECKLIST", ML, y);
     y += 8;
@@ -714,9 +723,9 @@ export async function generateAtrPdf(
 
     const hodCh = normalizeHodValidationChecklist(hodForFront.checklist);
     const hodItems: [HodLineDecision, string][] = [
-      [hodCh.mentoringProcessEffective,       "The mentoring process is effective."],
-      [hodCh.careerGuidanceMoreStructured,    "Career guidance activities should be more structured."],
-      [hodCh.deptCareerProgramsIntegrated,    "Department-level career development programs should be integrated."],
+      [hodCh.mentoringProcessEffective, "The mentoring process is effective."],
+      [hodCh.allAtrsProperlyFilled, "All ATRs have been properly filled."],
+      [hodCh.allDataVerified, "All data has been verified with departmental records."],
     ];
 
     y = renderChecklistTable(hodItems, y + 2) + 8;
@@ -764,11 +773,14 @@ export async function generateAtrPdf(
   const appendChiefMentorAuditFront = (): void => {
     if (!chiefPdf) return;
 
-    if (y > pageHeight - 125) { doc.addPage(); y = 25; }
-    else { y += 10; }
-
-    sectionDivider(doc, y - 3, ML, MR);
-    y += 8;
+    if (y > pageHeight - 125) {
+      doc.addPage();
+      y = 25;
+    } else if (!standaloneChiefMentorValidationPdf) {
+      y += 10;
+      sectionDivider(doc, y - 3, ML, MR);
+      y += 8;
+    }
 
     const validatedDisplay = chiefPdf.validatedAt
       ? format(new Date(chiefPdf.validatedAt), "PPP p")
@@ -818,11 +830,14 @@ export async function generateAtrPdf(
   const appendCoordinatorAuditFront = (): void => {
     if (!coordForFront) return;
 
-    if (y > pageHeight - 96) { doc.addPage(); y = 25; }
-    else { y += 10; }
-
-    sectionDivider(doc, y - 3, ML, MR);
-    y += 8;
+    if (y > pageHeight - 96) {
+      doc.addPage();
+      y = 25;
+    } else if (!standaloneCoordinatorValidationPdf) {
+      y += 10;
+      sectionDivider(doc, y - 3, ML, MR);
+      y += 8;
+    }
 
     const validatedDisplay = coordForFront.validatedAt
       ? format(new Date(coordForFront.validatedAt), "PPP p")

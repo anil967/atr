@@ -55,13 +55,13 @@ import {
 
 type HodChecklistKey =
   | "mentoringProcessEffective"
-  | "careerGuidanceMoreStructured"
-  | "deptCareerProgramsIntegrated";
+  | "allAtrsProperlyFilled"
+  | "allDataVerified";
 
 const HOD_STATEMENT_ROWS: { key: HodChecklistKey; label: string }[] = [
   { key: "mentoringProcessEffective", label: "The mentoring process is effective." },
-  { key: "careerGuidanceMoreStructured", label: "Career guidance activities should be more structured." },
-  { key: "deptCareerProgramsIntegrated", label: "Department-level career development programs should be integrated." },
+  { key: "allAtrsProperlyFilled", label: "All ATRs have been properly filled." },
+  { key: "allDataVerified", label: "All data has been verified with departmental records." },
 ];
 
 type ChiefChecklistKey =
@@ -192,6 +192,14 @@ function attachmentKind(a: Pick<AtrAttachment, "type" | "dataUrl">): "image" | "
   return "file";
 }
 
+function safeAttachmentArray(value: unknown): AtrAttachment[] {
+  return Array.isArray(value) ? (value as AtrAttachment[]) : [];
+}
+
+function safeTaggedMenteeArray(value: unknown): TaggedMentee[] {
+  return Array.isArray(value) ? (value as TaggedMentee[]) : [];
+}
+
 function actionRowReviewPct(action: ActionItem) {
   let n = 0;
   if (String(action.issue ?? "").trim()) n++;
@@ -255,8 +263,8 @@ function AtrDetailPage() {
   /** HOD per-line Agree / Disagree — Approve after all three are answered (mix of tick/cross allowed). */
   const [hodChecklist, setHodChecklist] = useState<Record<HodChecklistKey, HodLineDecision | null>>({
     mentoringProcessEffective: null,
-    careerGuidanceMoreStructured: null,
-    deptCareerProgramsIntegrated: null,
+    allAtrsProperlyFilled: null,
+    allDataVerified: null,
   });
 
   /** Chief Mentor — same: all three lines answered then Approve (any mix of Agree/Disagree). */
@@ -366,17 +374,21 @@ function AtrDetailPage() {
   }, []);
 
   const report = remoteReport ?? localReport ?? undefined;
+  const reportActions = Array.isArray(report?.actions) ? report.actions : [];
+  const reportStudents = Array.isArray(report?.students) ? report.students : [];
+  const reportAttachments = Array.isArray(report?.attachments) ? report.attachments : [];
+  const reportTimeline = Array.isArray(report?.timeline) ? report.timeline : [];
 
   const issueEvidenceForGallery = useMemo(
     () =>
-      (report?.actions ?? []).flatMap((action, actionIdx) =>
-        (action.evidenceFiles ?? []).map((file, fileIdx) => ({
+      reportActions.flatMap((action, actionIdx) =>
+        safeAttachmentArray(action.evidenceFiles).map((file, fileIdx) => ({
           file,
           issueIndex: actionIdx + 1,
           key: `ev-${action.id ?? actionIdx}-${fileIdx}-${file.name}`,
         })),
       ),
-    [report?.actions],
+    [reportActions],
   );
 
   if (!report) throw notFound();
@@ -410,8 +422,8 @@ function AtrDetailPage() {
 
   const hodChecksComplete =
     hodChecklist.mentoringProcessEffective != null &&
-    hodChecklist.careerGuidanceMoreStructured != null &&
-    hodChecklist.deptCareerProgramsIntegrated != null;
+    hodChecklist.allAtrsProperlyFilled != null &&
+    hodChecklist.allDataVerified != null;
 
   const chiefMentorChecksComplete =
     chiefChecklist.disciplineIssuesHandledWell != null &&
@@ -441,8 +453,8 @@ function AtrDetailPage() {
           hodEmail: user.email,
           checklist: {
             mentoringProcessEffective: hodChecklist.mentoringProcessEffective!,
-            careerGuidanceMoreStructured: hodChecklist.careerGuidanceMoreStructured!,
-            deptCareerProgramsIntegrated: hodChecklist.deptCareerProgramsIntegrated!,
+            allAtrsProperlyFilled: hodChecklist.allAtrsProperlyFilled!,
+            allDataVerified: hodChecklist.allDataVerified!,
           },
           reviewRemarks: remark.trim() || undefined,
         }
@@ -619,8 +631,8 @@ function AtrDetailPage() {
         }
         setHodChecklist({
           mentoringProcessEffective: null,
-          careerGuidanceMoreStructured: null,
-          deptCareerProgramsIntegrated: null,
+          allAtrsProperlyFilled: null,
+          allDataVerified: null,
         });
       } else if (action === "approve" && isChiefMentorReviewer && chiefMentorChecksComplete) {
         const snapshot = getReport(report.id) ?? remoteReport ?? report;
@@ -1082,8 +1094,8 @@ function AtrDetailPage() {
               </div>
 
               <div className="p-6 md:p-8 space-y-5">
-                {report.actions?.length ? (
-                  report.actions.map((row, idx) => {
+                {reportActions.length ? (
+                  reportActions.map((row, idx) => {
                     const rowKey = row.id ?? `row-${idx}`;
                     const collapsed = !!collapsedActionKeys[rowKey];
                     const pct = actionRowReviewPct(row);
@@ -1189,15 +1201,15 @@ function AtrDetailPage() {
                                     <Users className="size-3.5 text-growth/80" aria-hidden />
                                     Students
                                   </p>
-                                  {row.taggedStudents && row.taggedStudents.length > 0 ? (
+                                  {safeTaggedMenteeArray(row.taggedStudents).length > 0 ? (
                                     <ul className="text-sm space-y-1">
-                                      {row.taggedStudents.map((t) => (
+                                      {safeTaggedMenteeArray(row.taggedStudents).map((t) => (
                                         <li key={t.rollNo} className="leading-snug">
                                           <button
                                             type="button"
                                             onClick={() =>
                                               setStudentDetail(
-                                                resolveTaggedStudentForDetail(t, report.students),
+                                                resolveTaggedStudentForDetail(t, reportStudents),
                                               )
                                             }
                                             className="w-full text-left rounded-xl px-2 py-1.5 -mx-2 hover:bg-growth/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-growth/35 transition-colors group/stu"
@@ -1256,14 +1268,14 @@ function AtrDetailPage() {
                               </div>
                             </div>
 
-                            {(row.evidenceFiles?.length ?? 0) > 0 ? (
+                            {safeAttachmentArray(row.evidenceFiles).length > 0 ? (
                               <div className="pt-1">
                                 <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground flex items-center gap-2">
                                   <Paperclip className="size-3.5 text-growth/80" aria-hidden />
                                   Supporting evidence
                                 </p>
                                 <ul className="flex flex-wrap gap-2">
-                                  {(row.evidenceFiles ?? []).map((file, fIdx) => {
+                                  {safeAttachmentArray(row.evidenceFiles).map((file, fIdx) => {
                                     const hasPayload = attachmentHasPayload(file);
                                     return (
                                       <li key={`${file.name}-${fIdx}`}>
@@ -1347,7 +1359,7 @@ function AtrDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {report.students.map((s, i) => (
+                    {reportStudents.map((s, i) => (
                       <tr key={`${s.rollNo}-${i}`}>
                         <td className="px-7 py-3 text-xs text-muted-foreground tabular-nums">
                           {i + 1}
@@ -1378,7 +1390,7 @@ function AtrDetailPage() {
                   Attachments
                 </h2>
                 <div className="flex flex-wrap gap-3">
-                  {report.attachments.map((a, i) => {
+                  {reportAttachments.map((a, i) => {
                     const hasPayload = attachmentHasPayload(a);
                     const kind = attachmentKind(a);
                     const showImage = hasPayload && kind === "image";
@@ -1514,7 +1526,7 @@ function AtrDetailPage() {
           </div>
 
           <aside className="space-y-6">
-            <ApprovalTimeline timeline={report.timeline} currentStatus={report.status} />
+            <ApprovalTimeline timeline={reportTimeline} currentStatus={report.status} />
           </aside>
         </div>
 

@@ -27,6 +27,8 @@ export type AtrStatus =
   | "approved"
   | "rejected";
 
+export type AtrSession = "session_1" | "session_2";
+
 export const STATUS_LABELS: Record<AtrStatus, string> = {
   draft: "Draft",
   submitted: "Submitted",
@@ -82,8 +84,8 @@ export type HodLineDecision = "agreed" | "disagreed";
 /** Persisted checklist when HOD forwards to Chief Mentor. */
 export interface HodValidationChecklist {
   mentoringProcessEffective: HodLineDecision;
-  careerGuidanceMoreStructured: HodLineDecision;
-  deptCareerProgramsIntegrated: HodLineDecision;
+  allAtrsProperlyFilled: HodLineDecision;
+  allDataVerified: HodLineDecision;
 }
 
 /** Persisted when HOD forwards to Chief Mentor — powers HOD departmental review PDF regeneration. */
@@ -111,14 +113,17 @@ export function normalizeHodValidationChecklist(
   if (!checklist || typeof checklist !== "object") {
     return {
       mentoringProcessEffective: "agreed",
-      careerGuidanceMoreStructured: "agreed",
-      deptCareerProgramsIntegrated: "agreed",
+      allAtrsProperlyFilled: "agreed",
+      allDataVerified: "agreed",
     };
   }
   const c = checklist as Record<string, unknown>;
+  
+  // Try new keys first, fall back to legacy keys
   const a = c.mentoringProcessEffective;
-  const b = c.careerGuidanceMoreStructured;
-  const d = c.deptCareerProgramsIntegrated;
+  const b = c.allAtrsProperlyFilled ?? c.careerGuidanceMoreStructured;
+  const d = c.allDataVerified ?? c.deptCareerProgramsIntegrated;
+
   if (
     (a === "agreed" || a === "disagreed") &&
     (b === "agreed" || b === "disagreed") &&
@@ -126,23 +131,23 @@ export function normalizeHodValidationChecklist(
   ) {
     return {
       mentoringProcessEffective: a,
-      careerGuidanceMoreStructured: b,
-      deptCareerProgramsIntegrated: d,
+      allAtrsProperlyFilled: b,
+      allDataVerified: d,
     };
   }
   if (typeof a === "boolean" && typeof b === "boolean" && typeof d === "boolean") {
     return {
       mentoringProcessEffective: toDecision(a),
-      careerGuidanceMoreStructured: toDecision(b),
-      deptCareerProgramsIntegrated: toDecision(d),
+      allAtrsProperlyFilled: toDecision(b),
+      allDataVerified: toDecision(d),
     };
   }
   const legacy = !!(c as { mentoringEffectiveAndCareerPrograms?: boolean }).mentoringEffectiveAndCareerPrograms;
   const leg = toDecision(legacy);
   return {
     mentoringProcessEffective: leg,
-    careerGuidanceMoreStructured: leg,
-    deptCareerProgramsIntegrated: leg,
+    allAtrsProperlyFilled: leg,
+    allDataVerified: leg,
   };
 }
 
@@ -306,6 +311,10 @@ export interface AtrReport {
   title?: string;
   /** Normalized academic-year key, e.g. `2024-2025` (April–March cycle). Used for mentor quota (4 ATRs/year). */
   academicYear?: string;
+  /** Academic-year half: session 1 (Apr-Sep) or session 2 (Oct-Mar). */
+  session?: AtrSession;
+  /** ATR number inside the chosen session: 1 or 2. */
+  atrNo?: 1 | 2;
   startDate: string; // ISO date or string
   endDate: string;   // ISO date or string
   mentorId: string;
@@ -338,7 +347,14 @@ export function formatAcademicYearHuman(key: string): string {
 /** List/detail heading: academic year when present; legacy title or reference id. */
 export function atrDisplayLabel(r: AtrReport): string {
   const ay = r.academicYear?.trim();
-  if (ay) return `Academic Year ${formatAcademicYearHuman(ay)}`;
+  if (ay) {
+    const sessionLabel =
+      r.session === "session_1" ? "Session 1" : r.session === "session_2" ? "Session 2" : "";
+    const atrNoLabel = r.atrNo ? `ATR ${r.atrNo}` : "";
+    const parts = [sessionLabel, atrNoLabel].filter(Boolean);
+    if (parts.length > 0) return `Academic Year ${formatAcademicYearHuman(ay)} · ${parts.join(" · ")}`;
+    return `Academic Year ${formatAcademicYearHuman(ay)}`;
+  }
   if (r.title?.trim()) return r.title.trim();
   return r.id;
 }

@@ -12,6 +12,7 @@ import { getCurrentUser, useCurrentUser } from "@/lib/auth-store";
 import { createReport, MAX_ATR_PER_ACADEMIC_YEAR, useReports } from "@/lib/atr-store";
 import {
   actionItemEffectiveStudentCount,
+  type AtrSession,
   formatAcademicYearHuman,
   type AtrAttachment,
   type ParsedStudent,
@@ -79,20 +80,20 @@ function parseAcademicYearToKey(raw: string): string | null {
   return `${a}-${b}`;
 }
 
-/** April–March cycle as inclusive ISO date bounds for `y1-y2` keys (`y2 === y1 + 1`). */
-function academicYearKeyToCycleIsoRange(key: string): { min: string; max: string } | null {
+/** Session windows inside April-March academic year. */
+function academicYearKeyToSessionIsoRange(
+  key: string,
+  session: AtrSession,
+): { min: string; max: string } | null {
   const parts = key.trim().split("-");
   if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
   const y1 = parseInt(parts[0], 10);
   const y2 = parseInt(parts[1], 10);
   if (Number.isNaN(y1) || Number.isNaN(y2) || y2 !== y1 + 1) return null;
-  return { min: `${y1}-04-01`, max: `${y2}-03-31` };
-}
-
-function clampIsoDateToInclusiveRange(iso: string, min: string, max: string): string {
-  if (iso < min) return min;
-  if (iso > max) return max;
-  return iso;
+  if (session === "session_1") {
+    return { min: `${y1}-04-01`, max: `${y1}-09-30` };
+  }
+  return { min: `${y1}-10-01`, max: `${y2}-03-31` };
 }
 
 function autosizeTextarea(el: HTMLTextAreaElement | null) {
@@ -169,6 +170,16 @@ function rowCompletionPctForIssue(row: {
   return Math.round((n / 6) * 100);
 }
 
+function nextAvailableSlot(usedSlots: Set<string>): { session: AtrSession; atrNo: 1 | 2 } | null {
+  const order: Array<{ session: AtrSession; atrNo: 1 | 2 }> = [
+    { session: "session_1", atrNo: 1 },
+    { session: "session_1", atrNo: 2 },
+    { session: "session_2", atrNo: 1 },
+    { session: "session_2", atrNo: 2 },
+  ];
+  return order.find((slot) => !usedSlots.has(`${slot.session}-${slot.atrNo}`)) ?? null;
+}
+
 function NewAtrPage() {
   const user = useCurrentUser();
   const navigate = useNavigate();
@@ -205,8 +216,8 @@ function NewAtrPage() {
     academicYearDraft.trim().length > 0 && filteredAcademicYearHints.length > 0
       ? "bcet-academic-year-hints"
       : undefined;
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [session, setSession] = useState<AtrSession | "">("");
+  const [atrNo, setAtrNo] = useState<1 | 2 | null>(null);
   const [actions, setActions] = useState<any[]>([]);
   const [students, setStudents] = useState<ParsedStudent[]>([]);
   const [description, setDescription] = useState("");
@@ -597,66 +608,43 @@ function NewAtrPage() {
     setAcademicYear("");
   };
 
-  const cycleDateBounds = useMemo(
-    () => academicYearKeyToCycleIsoRange(academicYear.trim()),
-    [academicYear],
-  );
+  const usedSessionSlots = useMemo(() => {
+    const slots = new Set<string>();
+    if (!user?.id || !academicYear.trim()) return slots;
+    mentorReports.forEach((r) => {
+      if (r.mentorId !== user.id) return;
+      if ((r.academicYear ?? "").trim() !== academicYear.trim()) return;
+      if (!r.session || !r.atrNo) return;
+      slots.add(`${r.session}-${r.atrNo}`);
+    });
+    return slots;
+  }, [mentorReports, user?.id, academicYear]);
 
-  const cycleDatesStepComplete = useMemo(() => {
-    if (!cycleDateBounds || !startDate || !endDate) return false;
-    const { min, max } = cycleDateBounds;
-    if (startDate < min || startDate > max) return false;
-    if (endDate < min || endDate > max) return false;
-    return startDate <= endDate;
-  }, [cycleDateBounds, startDate, endDate]);
+  const selectedSessionRange = useMemo(() => {
+    if (!academicYear.trim() || !session) return null;
+    return academicYearKeyToSessionIsoRange(academicYear.trim(), session);
+  }, [academicYear, session]);
 
-  /** Cycle dates default to full AY (1 Apr → 31 Mar); cleared when no academic year. */
   useEffect(() => {
-    const k = academicYear.trim();
-    if (!k) {
-      setStartDate("");
-      setEndDate("");
+    if (!academicYear.trim()) {
+      setSession("");
+      setAtrNo(null);
       return;
     }
-    const range = academicYearKeyToCycleIsoRange(k);
-    if (!range) return;
-    setStartDate(range.min);
-    setEndDate(range.max);
-  }, [academicYear]);
-
-  const onCycleStartChange = (iso: string) => {
-    if (!cycleDateBounds) return;
-    if (!iso.trim()) {
-      toast.error("Choose a cycle start date within the academic year.");
+    const currentValid =
+      Boolean(session) &&
+      Boolean(atrNo) &&
+      !usedSessionSlots.has(`${session}-${atrNo}`);
+    if (currentValid) return;
+    const next = nextAvailableSlot(usedSessionSlots);
+    if (!next) {
+      setSession("");
+      setAtrNo(null);
       return;
     }
-    const next = clampIsoDateToInclusiveRange(iso, cycleDateBounds.min, cycleDateBounds.max);
-    if (next !== iso) {
-      toast.error("Cycle start must fall within the selected academic year (1 April – 31 March).");
-    }
-    setStartDate(next);
-    setEndDate((prev) => {
-      if (!prev || prev < next) return next;
-      return prev;
-    });
-  };
-
-  const onCycleEndChange = (iso: string) => {
-    if (!cycleDateBounds) return;
-    if (!iso.trim()) {
-      toast.error("Choose a cycle end date within the academic year.");
-      return;
-    }
-    const next = clampIsoDateToInclusiveRange(iso, cycleDateBounds.min, cycleDateBounds.max);
-    if (next !== iso) {
-      toast.error("Cycle end must fall within the selected academic year (1 April – 31 March).");
-    }
-    setEndDate(next);
-    setStartDate((prev) => {
-      if (!prev || prev > next) return next;
-      return prev;
-    });
-  };
+    setSession(next.session);
+    setAtrNo(next.atrNo);
+  }, [academicYear, usedSessionSlots, session, atrNo]);
 
   const issuesStepComplete = useMemo(
     () => actions.length > 0 && actions.every((a) => isIssueFullyComplete(a)),
@@ -671,16 +659,22 @@ function NewAtrPage() {
     return (
       academicYear.trim().length > 0 &&
       !yearQuotaReached &&
-      cycleDatesStepComplete &&
+      Boolean(session) &&
+      Boolean(atrNo) &&
       wordCount <= 250 &&
       issuesStepComplete
     );
-  }, [academicYear, yearQuotaReached, cycleDatesStepComplete, wordCount, issuesStepComplete]);
+  }, [academicYear, yearQuotaReached, session, atrNo, wordCount, issuesStepComplete]);
 
   const handleSubmit = async () => {
     if (!canSubmit || !user) return;
-    if (!cycleDatesStepComplete) {
-      toast.error("Cycle start and end must fall within the selected academic year (April–March).");
+    if (!session || !atrNo) {
+      toast.error("Choose session and ATR number before continuing.");
+      return;
+    }
+    const range = academicYearKeyToSessionIsoRange(academicYear.trim(), session);
+    if (!range) {
+      toast.error("Invalid academic year/session combination.");
       return;
     }
     if (!issuesStepComplete) {
@@ -696,8 +690,10 @@ function NewAtrPage() {
     try {
       const report = await createReport({
         academicYear: academicYear.trim(),
-        startDate,
-        endDate,
+        session,
+        atrNo,
+        startDate: range.min,
+        endDate: range.max,
         mentorId: user.id,
         mentorName: user.name,
         department: user.department,
@@ -886,45 +882,29 @@ function NewAtrPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Cycle Start Date</label>
-                      <input
-                        type="date"
-                        value={startDate}
-                        min={cycleDateBounds?.min}
-                        max={
-                          cycleDateBounds && endDate
-                            ? clampIsoDateToInclusiveRange(endDate, cycleDateBounds.min, cycleDateBounds.max)
-                            : cycleDateBounds?.max
-                        }
-                        disabled={!cycleDateBounds}
-                        onChange={(e) => onCycleStartChange(e.target.value)}
-                        className="w-full px-5 py-4 bg-secondary/20 border border-border/50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-growth/20 focus:bg-background transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      />
+                      <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                        Session (auto detected)
+                      </label>
+                      <div className="w-full px-5 py-4 bg-secondary/20 border border-border/50 rounded-2xl text-sm text-foreground">
+                        {session ? (session === "session_1" ? "Session 1" : "Session 2") : "—"}
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Cycle End Date</label>
-                      <input
-                        type="date"
-                        value={endDate}
-                        min={
-                          cycleDateBounds && startDate
-                            ? clampIsoDateToInclusiveRange(startDate, cycleDateBounds.min, cycleDateBounds.max)
-                            : cycleDateBounds?.min
-                        }
-                        max={cycleDateBounds?.max}
-                        disabled={!cycleDateBounds}
-                        onChange={(e) => onCycleEndChange(e.target.value)}
-                        className="w-full px-5 py-4 bg-secondary/20 border border-border/50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-growth/20 focus:bg-background transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      />
+                      <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                        ATR No (auto detected)
+                      </label>
+                      <div className="w-full px-5 py-4 bg-secondary/20 border border-border/50 rounded-2xl text-sm text-foreground">
+                        {atrNo ? `ATR ${atrNo}` : "—"}
+                      </div>
                     </div>
                   </div>
-                  {cycleDateBounds ? (
+                  {selectedSessionRange ? (
                     <p className="text-xs text-muted-foreground">
-                      Cycle period must stay inside this academic year:{" "}
+                      Selected window:{" "}
                       <span className="font-mono tabular-nums text-foreground">
-                        {cycleDateBounds.min} — {cycleDateBounds.max}
-                      </span>{" "}
-                      (inclusive). Start date cannot be after end date.
+                        {selectedSessionRange.min} — {selectedSessionRange.max}
+                      </span>
+                      . This range is auto-applied from session selection.
                     </p>
                   ) : null}
                 </div>
@@ -933,7 +913,13 @@ function NewAtrPage() {
               <div className="flex justify-end">
                 <button
                   onClick={() => setActiveStep("actions")}
-                  disabled={!academicYear.trim() || yearQuotaReached || !cycleDatesStepComplete}
+                  disabled={
+                    !academicYear.trim() ||
+                    yearQuotaReached ||
+                    !session ||
+                    !atrNo ||
+                    usedSessionSlots.has(`${session}-${atrNo}`)
+                  }
                   className="inline-flex items-center gap-2 bg-foreground text-background px-8 py-4 rounded-2xl font-bold hover:opacity-90 transition disabled:opacity-30 group"
                 >
                   Continue to Actions
