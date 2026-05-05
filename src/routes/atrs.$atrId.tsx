@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect, notFound } from "@tanstack/react-router";
-import React, { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -192,7 +192,7 @@ function attachmentKind(a: Pick<AtrAttachment, "type" | "dataUrl">): "image" | "
   return "file";
 }
 
-function rowCompletionPctForIssue(action: ActionItem) {
+function actionRowReviewPct(action: ActionItem) {
   let n = 0;
   if (String(action.issue ?? "").trim()) n++;
   if (actionItemEffectiveStudentCount(action) > 0) n++;
@@ -227,205 +227,6 @@ export const Route = createFileRoute("/atrs/$atrId")({
     </AppShell>
   ),
 });
-
-// ── Memoized Components for Performance ───────────────────────────────────────
-
-const StudentRosterTable = React.memo(({ students, department }: { students: ParsedStudent[]; department: string }) => {
-  if (students.length === 0) return null;
-  return (
-    <section className="bg-surface rounded-3xl border border-border/60 shadow-card overflow-hidden">
-      <div className="p-7 pb-4">
-        <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground">Attending students</h2>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm min-w-[720px]">
-          <thead className="bg-secondary/40">
-            <tr>
-              <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">#</th>
-              <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Name</th>
-              <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Roll No</th>
-              <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Reg No</th>
-              <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Branch</th>
-              <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sem</th>
-              <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Contact</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {students.map((s, i) => (
-              <tr key={`${s.rollNo}-${i}`}>
-                <td className="px-7 py-3 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
-                <td className="px-7 py-3 font-medium">{s.name}</td>
-                <td className="px-7 py-3 font-mono text-xs">{s.rollNo}</td>
-                <td className="px-7 py-3 font-mono text-xs text-muted-foreground">{s.regNo ?? "—"}</td>
-                <td className="px-7 py-3 text-xs text-muted-foreground">{s.branch || s.department || department}</td>
-                <td className="px-7 py-3 text-xs text-muted-foreground">{s.semester || "—"}</td>
-                <td className="px-7 py-3 text-xs font-mono text-muted-foreground">{s.contactNumber || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-});
-
-const ActionList = React.memo(
-  ({
-    actions,
-    students,
-    collapsedActionKeys,
-    setCollapsedActionKeys,
-    setStudentDetail,
-    handleOpenAttachment,
-  }: {
-    actions: any[];
-    students: ParsedStudent[];
-    collapsedActionKeys: Record<string, boolean>;
-    setCollapsedActionKeys: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-    setStudentDetail: (s: any) => void;
-    handleOpenAttachment: (a: any) => void;
-  }) => {
-    return (
-      <section className="space-y-6">
-        <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground px-1 flex items-center gap-2">
-          <ListChecks className="size-4" /> Issue & Action Log
-        </h2>
-        <div className="space-y-4">
-          {actions.length > 0 ? (
-            actions.map((row, idx) => {
-              const rowKey = row.id || `idx-${idx}`;
-              const collapsed = !!collapsedActionKeys[rowKey];
-              const pct = rowCompletionPctForIssue(row);
-              const preview = row.issue?.slice(0, 120) + (row.issue?.length > 120 ? "..." : "");
-
-              return (
-                <article
-                  key={rowKey}
-                  className={cn(
-                    "rounded-[1.5rem] border transition-all duration-300",
-                    "border-growth/15 bg-secondary/35 backdrop-blur-lg shadow-sm hover:shadow-md hover:border-growth/35",
-                  )}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4 p-5 md:p-6 border-b border-growth/10">
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={() => setCollapsedActionKeys((p) => ({ ...p, [rowKey]: !collapsed }))}
-                        className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-growth/20 bg-secondary/40 text-muted-foreground hover:bg-growth/15 hover:text-growth transition-colors"
-                      >
-                        <ChevronDown className={cn("size-5 transition-transform duration-300", collapsed && "-rotate-90")} />
-                      </button>
-                      <div className="size-10 shrink-0 rounded-full bg-gradient-to-br from-growth to-growth/70 text-growth-foreground shadow-md flex items-center justify-center font-bold text-sm tabular-nums">
-                        {idx + 1}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCollapsedActionKeys((p) => ({ ...p, [rowKey]: !collapsed }))}
-                        className="min-w-0 text-left rounded-xl px-2 py-0.5 -mx-2 hover:bg-growth/5 transition-colors"
-                      >
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Issue #{idx + 1}</p>
-                        {collapsed && preview ? (
-                          <p className="text-[11px] text-foreground/90 line-clamp-2 mt-1 leading-snug">{preview}</p>
-                        ) : (
-                          <p className="text-[11px] text-muted-foreground mt-1">Expand to read actions and evidence.</p>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="px-5 md:px-6 pt-2 pb-4">
-                    <div className="flex items-center justify-between gap-3 mb-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Row completeness</span>
-                      <span className="text-[11px] font-bold tabular-nums text-growth">{pct}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-background/70 overflow-hidden border border-growth/10">
-                      <div className="h-full rounded-full bg-gradient-to-r from-growth/80 to-emerald-300/90 transition-[width] duration-700 ease-out" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-
-                  {!collapsed && (
-                    <div className="px-5 md:px-6 pb-6 md:pb-7 space-y-5">
-                      <div className="rounded-2xl border border-growth/10 bg-background/75 px-4 py-3 text-sm whitespace-pre-wrap">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2">Issue identified</p>
-                        <p className="leading-relaxed">{row.issue || "—"}</p>
-                      </div>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                          <div className="rounded-2xl border border-growth/10 bg-background/75 px-4 py-3">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
-                              <Users className="size-3.5 text-growth" /> Students
-                            </p>
-                            {row.taggedStudents?.length ? (
-                              <ul className="text-sm space-y-1">
-                                {row.taggedStudents.map((t: any) => (
-                                  <li key={t.rollNo}>
-                                    <button
-                                      type="button"
-                                      onClick={() => setStudentDetail(resolveTaggedStudentForDetail(t, students))}
-                                      className="text-left hover:text-growth hover:underline font-medium"
-                                    >
-                                      {t.name} <span className="text-muted-foreground font-mono text-xs ml-2">{t.rollNo}</span>
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="text-lg font-bold tabular-nums">{row.studentCount}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="space-y-5">
-                          <div className="rounded-2xl border border-growth/10 bg-background/75 px-4 py-3">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
-                              <ListChecks className="size-3.5 text-growth" /> Action taken
-                            </p>
-                            <p className="text-sm leading-relaxed">{row.actionTaken || "—"}</p>
-                          </div>
-                        </div>
-                      </div>
-                      {(row.evidenceFiles?.length ?? 0) > 0 && (
-                        <div className="pt-1">
-                          <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground flex items-center gap-2">
-                            <Paperclip className="size-3.5 text-growth" /> Evidence
-                          </p>
-                          <ul className="flex flex-wrap gap-2">
-                            {(row.evidenceFiles ?? []).map((file: any, fi: number) => {
-                              const hasPayload = attachmentHasPayload(file);
-                              return (
-                                <li key={fi}>
-                                  <button
-                                    type="button"
-                                    disabled={!hasPayload}
-                                    onClick={() => handleOpenAttachment(file)}
-                                    className={cn(
-                                      "inline-flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors text-[10px] font-bold",
-                                      hasPayload ? "border-growth/15 bg-growth/5 hover:bg-growth/10" : "border-border/60 bg-muted/30 text-muted-foreground",
-                                    )}
-                                  >
-                                    <FileCheck className="size-3.5 text-growth" /> {file.name}
-                                  </button>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </article>
-              );
-            })
-          ) : (
-            <div className="py-14 text-center rounded-2xl border border-dashed border-growth/25 bg-secondary/20">
-              <p className="text-sm font-semibold">No issues on this report</p>
-            </div>
-          )}
-        </div>
-      </section>
-    );
-  },
-);
-
 
 function AtrDetailPage() {
   const { atrId } = Route.useParams();
@@ -503,21 +304,15 @@ function AtrDetailPage() {
     }
     try {
       const [meta, base64] = attachment.dataUrl.split(",", 2);
-      if (!base64) {
-        toast.error("Attachment payload is corrupt.");
-        return;
-      }
       const mimeFromUrl = meta?.match(/data:([^;]+);base64/i)?.[1];
       const mime = attachment.type || mimeFromUrl || "application/octet-stream";
-      const binary = atob(base64);
+      const binary = atob(base64 ?? "");
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const normalizedMime = mime.toLowerCase().includes("pdf") ? "application/pdf" : mime;
-      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: normalizedMime }));
+      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
       attachmentBlobUrlRef.current = blobUrl;
-      setAttachmentPreview({ isOpen: true, name: attachment.name, mime: normalizedMime, url: blobUrl });
-    } catch (e) {
-      console.error("Preview failed", e);
+      setAttachmentPreview({ isOpen: true, name: attachment.name, mime, url: blobUrl });
+    } catch {
       toast.error("Could not open this attachment.");
     }
   };
@@ -528,46 +323,31 @@ function AtrDetailPage() {
     const load = () =>
       getAtrByIdFn({ data: { user, atrId } })
         .then((full) => {
-          if (cancelled || !full) return null;
-          // Only update if something meaningful changed (or first load)
-          setRemoteReport((prev) => {
-            if (!prev) return full as AtrReport;
-            // Rough check to see if payloads arrived (length of actions/attachments changed or dataUrl appeared)
-            if (reportHasPendingAttachmentPayload(prev) && !reportHasPendingAttachmentPayload(full as AtrReport)) {
-              return full as AtrReport;
-            }
-            if (prev.status !== (full as any).status) return full as AtrReport;
-            return prev;
-          });
+          if (!cancelled && full) setRemoteReport(full as AtrReport);
           return full as AtrReport | null;
         })
         .catch(() => null);
 
     void load().then((first) => {
       if (cancelled || !reportHasPendingAttachmentPayload(first)) return;
-      
-      const canSync = first?.status === "submitted" || first?.status === "coordinator_review";
-      if (!canSync) return;
-
       let attempts = 0;
       const timer = window.setInterval(() => {
-        attempts++;
-        if (attempts > 5 || cancelled) {
+        if (cancelled) {
           window.clearInterval(timer);
           return;
         }
+        attempts += 1;
         void load().then((latest) => {
-          if (!latest || !reportHasPendingAttachmentPayload(latest) || attempts >= 5) {
+          if (!reportHasPendingAttachmentPayload(latest) || attempts >= 8) {
             window.clearInterval(timer);
           }
         });
-      }, 3000);
+      }, 1200);
     });
-
     return () => {
       cancelled = true;
     };
-  }, [atrId, user?.id]);
+  }, [atrId, user]);
 
   useEffect(() => () => {
     const u = attachmentBlobUrlRef.current;
@@ -1018,8 +798,8 @@ function AtrDetailPage() {
                     className="max-h-full max-w-full object-contain rounded-xl border border-border/60 bg-surface"
                   />
                 </div>
-              ) : attachmentPreview.mime.toLowerCase().includes("pdf") ? (
-                <iframe title={attachmentPreview.name} src={attachmentPreview.url} type="application/pdf" className="w-full h-full border-0" />
+              ) : attachmentPreview.mime === "application/pdf" ? (
+                <iframe title={attachmentPreview.name} src={attachmentPreview.url} className="w-full h-full border-0" />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground p-8">
                   <Paperclip className="size-10" />
@@ -1260,6 +1040,7 @@ function AtrDetailPage() {
               </div>
             </section>
 
+            {/* Action Taken Framework — mirrors Create ATR layout (read-only) */}
             <section className="rounded-[2rem] border border-growth/20 bg-background/35 dark:bg-secondary/25 backdrop-blur-xl shadow-[0_24px_80px_-28px_rgba(45,79,60,0.35)] overflow-hidden">
               <div className="p-6 md:p-8 border-b border-growth/10 bg-secondary/25 backdrop-blur-md">
                 <div className="flex gap-4 items-start">
@@ -1272,25 +1053,301 @@ function AtrDetailPage() {
                     </h2>
                     <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
                       Structured mentoring outcomes as submitted — same layout as the Create ATR step for easier review.
+                      Collapse sections to skim; expand for full narrative and evidence.
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="p-6 md:p-8 space-y-5">
-                <ActionList
-                  actions={report.actions}
-                  students={report.students}
-                  collapsedActionKeys={collapsedActionKeys}
-                  setCollapsedActionKeys={setCollapsedActionKeys}
-                  setStudentDetail={setStudentDetail}
-                  handleOpenAttachment={handleOpenAttachment}
-                />
+                {report.actions?.length ? (
+                  report.actions.map((row, idx) => {
+                    const rowKey = row.id ?? `row-${idx}`;
+                    const collapsed = !!collapsedActionKeys[rowKey];
+                    const pct = actionRowReviewPct(row);
+                    const preview =
+                      String(row.issue ?? "").trim().slice(0, 96) +
+                      (String(row.issue ?? "").trim().length > 96 ? "…" : "");
+
+                    return (
+                      <article
+                        key={rowKey}
+                        className={cn(
+                          "rounded-[1.5rem] border border-growth/15 bg-secondary/35 dark:bg-black/25 backdrop-blur-lg",
+                          "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[border-color] duration-300",
+                          "hover:border-growth/30",
+                        )}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4 p-5 md:p-6 border-b border-growth/10">
+                          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCollapsedActionKeys((p) => ({
+                                  ...p,
+                                  [rowKey]: !p[rowKey],
+                                }))
+                              }
+                              aria-expanded={!collapsed}
+                              aria-label={collapsed ? "Expand issue details" : "Collapse issue details"}
+                              className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-growth/20 bg-secondary/40 text-muted-foreground hover:bg-growth/15 hover:text-growth transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
+                            >
+                              <ChevronDown
+                                className={cn("size-5 transition-transform duration-300", collapsed && "-rotate-90")}
+                                aria-hidden
+                              />
+                            </button>
+                            <div className="hidden sm:flex size-10 shrink-0 rounded-full bg-growth/10 border border-growth/20 items-center justify-center">
+                              <GripVertical className="size-5 text-muted-foreground opacity-50" aria-hidden />
+                            </div>
+                            <div
+                              className="size-10 shrink-0 rounded-full bg-gradient-to-br from-growth to-growth/70 text-growth-foreground shadow-md shadow-growth/30 flex items-center justify-center font-bold text-sm tabular-nums ring-4 ring-growth/15"
+                              aria-hidden
+                            >
+                              {idx + 1}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCollapsedActionKeys((p) => ({
+                                  ...p,
+                                  [rowKey]: !p[rowKey],
+                                }))
+                              }
+                              className="min-w-0 text-left rounded-xl px-2 py-0.5 -mx-2 hover:bg-growth/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-growth/40"
+                            >
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                Issue #{idx + 1}
+                              </p>
+                              {collapsed && preview ? (
+                                <p className="text-[11px] text-foreground/90 line-clamp-2 mt-1 leading-snug max-w-xl">
+                                  {preview}
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground mt-1">
+                                  Expand to read actions, timeline, outcome, and evidence.
+                                </p>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="px-5 md:px-6 pt-2 pb-4">
+                          <div className="flex items-center justify-between gap-3 mb-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                              Row completeness
+                            </span>
+                            <span className="text-[11px] font-bold tabular-nums text-growth">{pct}%</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-background/70 dark:bg-black/35 overflow-hidden border border-growth/10">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-growth/80 via-growth to-emerald-300/90 transition-[width] duration-700 ease-out shadow-[0_0_14px_rgba(45,79,60,0.45)]"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {!collapsed ? (
+                          <div className="px-5 md:px-6 pb-6 md:pb-7 space-y-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 duration-300">
+                            <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3 text-sm whitespace-pre-wrap">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2">
+                                Issue identified
+                              </p>
+                              <p className="leading-relaxed text-foreground/95">
+                                {row.issue?.trim() ? row.issue : (
+                                  <span className="text-muted-foreground italic">—</span>
+                                )}
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,240px)_1fr] gap-6">
+                              <div className="space-y-4">
+                                <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
+                                    <Users className="size-3.5 text-growth/80" aria-hidden />
+                                    Students
+                                  </p>
+                                  {row.taggedStudents && row.taggedStudents.length > 0 ? (
+                                    <ul className="text-sm space-y-1">
+                                      {row.taggedStudents.map((t) => (
+                                        <li key={t.rollNo} className="leading-snug">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setStudentDetail(
+                                                resolveTaggedStudentForDetail(t, report.students),
+                                              )
+                                            }
+                                            className="w-full text-left rounded-xl px-2 py-1.5 -mx-2 hover:bg-growth/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-growth/35 transition-colors group/stu"
+                                          >
+                                            <span className="font-medium text-foreground group-hover/stu:text-growth group-hover/stu:underline underline-offset-2">
+                                              {t.name}
+                                            </span>
+                                            <span className="text-muted-foreground font-mono text-xs ml-2">
+                                              {t.rollNo}
+                                            </span>
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-lg font-bold tabular-nums text-foreground">
+                                      {row.studentCount}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
+                                    <CalendarDays className="size-3.5 text-growth/80" aria-hidden />
+                                    Timeline / milestone
+                                  </p>
+                                  <p className="text-sm whitespace-pre-wrap">
+                                    {row.timeline?.trim() ? row.timeline : (
+                                      <span className="text-muted-foreground italic">—</span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="space-y-5">
+                                <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
+                                    <ListChecks className="size-3.5 text-growth/80" aria-hidden />
+                                    Action taken
+                                  </p>
+                                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                                    {row.actionTaken?.trim() ? row.actionTaken : (
+                                      <span className="text-muted-foreground italic">—</span>
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="rounded-2xl border border-growth/10 bg-background/75 dark:bg-black/35 px-4 py-3">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-2 flex items-center gap-2">
+                                    <Sparkles className="size-3.5 text-growth/80" aria-hidden />
+                                    Outcome / impact
+                                  </p>
+                                  <p className="text-sm text-growth font-medium whitespace-pre-wrap leading-relaxed">
+                                    {row.outcome?.trim() ? row.outcome : (
+                                      <span className="text-muted-foreground italic font-normal">—</span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {(row.evidenceFiles?.length ?? 0) > 0 ? (
+                              <div className="pt-1">
+                                <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground flex items-center gap-2">
+                                  <Paperclip className="size-3.5 text-growth/80" aria-hidden />
+                                  Supporting evidence
+                                </p>
+                                <ul className="flex flex-wrap gap-2">
+                                  {(row.evidenceFiles ?? []).map((file, fIdx) => {
+                                    const hasPayload = attachmentHasPayload(file);
+                                    return (
+                                      <li key={`${file.name}-${fIdx}`}>
+                                        <button
+                                          type="button"
+                                          disabled={!hasPayload}
+                                          onClick={() =>
+                                            handleOpenAttachment({
+                                              name: file.name,
+                                              size: file.size,
+                                              type: file.type,
+                                              dataUrl: file.dataUrl,
+                                            })
+                                          }
+                                          className={cn(
+                                            "inline-flex items-center gap-2 pl-3 pr-3 py-2 rounded-xl border transition-colors text-left max-w-[220px]",
+                                            hasPayload
+                                              ? "border-growth/15 bg-growth/5 hover:bg-growth/10 hover:border-growth/30"
+                                              : "border-border/60 bg-muted/30 text-muted-foreground cursor-not-allowed",
+                                          )}
+                                          title={hasPayload ? "Open file preview" : "File is still syncing"}
+                                        >
+                                          <FileCheck className="size-3.5 shrink-0 text-growth" aria-hidden />
+                                          <span className="truncate text-[10px] font-bold">{file.name}</span>
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-14 text-center rounded-2xl border border-dashed border-growth/25 bg-secondary/20">
+                    <ClipboardList className="size-10 text-growth/45 mb-3" aria-hidden />
+                    <p className="text-sm font-semibold text-foreground">No issues on this report</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                      The mentor did not attach structured action rows for this submission.
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
 
-            <StudentRosterTable students={report.students} department={report.department} />
-
+            {/* Students */}
+            <section className="bg-surface rounded-3xl border border-border/60 shadow-card overflow-hidden">
+              <div className="p-7 pb-4">
+                <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                  Attending students
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[720px]">
+                  <thead className="bg-secondary/40">
+                    <tr>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        #
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Name
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Roll No
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Reg No
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Branch
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Sem
+                      </th>
+                      <th className="px-7 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Contact
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {report.students.map((s, i) => (
+                      <tr key={`${s.rollNo}-${i}`}>
+                        <td className="px-7 py-3 text-xs text-muted-foreground tabular-nums">
+                          {i + 1}
+                        </td>
+                        <td className="px-7 py-3">{s.name}</td>
+                        <td className="px-7 py-3 font-mono text-xs">{s.rollNo}</td>
+                        <td className="px-7 py-3 font-mono text-xs text-muted-foreground">
+                          {s.regNo ?? "—"}
+                        </td>
+                        <td className="px-7 py-3 text-xs text-muted-foreground">
+                          {s.branch ?? s.department ?? report.department}
+                        </td>
+                        <td className="px-7 py-3 text-xs text-muted-foreground">{s.semester ?? "—"}</td>
+                        <td className="px-7 py-3 text-xs font-mono text-muted-foreground">
+                          {s.contactNumber ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             {/* Attachments + per-issue supporting evidence (same total as summary “Attachments”) */}
             {totalAtrStoredFiles(report) > 0 ? (

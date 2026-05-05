@@ -414,31 +414,6 @@ export const saveStudentsFn = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Strip base64 dataUrls from ATR payloads for lightweight list fetching. */
-function sanitizeAtrPayload(payload: any): any {
-  if (!payload) return payload;
-  const p = { ...payload };
-  if (Array.isArray(p.attachments)) {
-    p.attachments = p.attachments.map((a: any) => ({ name: a.name, size: a.size, type: a.type }));
-  }
-  if (Array.isArray(p.actions)) {
-    p.actions = p.actions.map((act: any) => ({
-      ...act,
-      evidenceFiles: Array.isArray(act.evidenceFiles)
-        ? act.evidenceFiles.map((f: any) => ({ name: f.name, size: f.size, type: f.type }))
-        : [],
-    }));
-  }
-  if (p.iqacSignedScan) {
-    p.iqacSignedScan = {
-      name: p.iqacSignedScan.name,
-      size: p.iqacSignedScan.size,
-      type: p.iqacSignedScan.type,
-    };
-  }
-  return p;
-}
-
 // ── ATR Functions ─────────────────────────────────────────────────────────────
 
 export const getAtrsFn = createServerFn({ method: "POST" })
@@ -459,7 +434,7 @@ export const getAtrsFn = createServerFn({ method: "POST" })
             payload != null && hodDepartmentMatches(payload.department, user.department)
           );
         })
-        .map((row) => ({ ...(sanitizeAtrPayload(row.payload) as object), id: row.id }));
+        .map((row) => ({ ...(row.payload as object), id: row.id }));
     }
 
     if (user.role === "coordinator") {
@@ -479,7 +454,7 @@ export const getAtrsFn = createServerFn({ method: "POST" })
           const payload = row.payload as AtrReport | null | undefined;
           return payload?.mentorId != null && mentorIds.has(payload.mentorId);
         })
-        .map((row) => ({ ...(sanitizeAtrPayload(row.payload) as object), id: row.id }));
+        .map((row) => ({ ...(row.payload as object), id: row.id }));
     }
 
     let query = sb.from("atrs").select("*");
@@ -492,7 +467,7 @@ export const getAtrsFn = createServerFn({ method: "POST" })
     const { data: rows, error } = await query.order("created_at", { ascending: false });
 
     if (error) handleSupabaseError(error);
-    return (rows ?? []).map((row) => ({ ...(sanitizeAtrPayload(row.payload) as object), id: row.id }));
+    return (rows ?? []).map((row) => ({ ...(row.payload as object), id: row.id }));
   });
 
 /** Full payload (includes attachment `dataUrl` when present). Local cache strips those to save quota. */
