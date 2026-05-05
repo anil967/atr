@@ -32,12 +32,12 @@ async function main() {
 
   // 3. Update existing ATRs that were created while mapping was missing
   console.log("Updating existing ATRs to assign them to Anil…");
-  const { data: atrs } = await sb.from("atrs").select("id, payload").eq("mentor_id", aradhana.id);
+  const { data: atrs } = await sb.from("atrs").select("id, payload");
   
   if (atrs) {
     for (const atr of atrs) {
       const payload = atr.payload as any;
-      if (payload.coordinatorName === "Pending Assignment") {
+      if (payload.mentorId === aradhana.id && payload.coordinatorName === "Pending Assignment") {
         payload.coordinatorId = anil.id;
         payload.coordinatorName = anil.name;
         
