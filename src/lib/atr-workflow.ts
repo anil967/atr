@@ -62,13 +62,14 @@ const STAGE_EXPECTED_ROLE: Partial<Record<AtrStatus, Role>> = {
  * Old rows wrongly used destination stage + forwarding actor — those get ignored until re-approved.
  */
 export function entryForDisplayedStage(
-  timeline: AtrTimelineEntry[],
+  timeline: AtrTimelineEntry[] | undefined | null,
   stageKey: AtrTimelineEntry["stage"],
 ): AtrTimelineEntry | undefined {
   if (stageKey === "rejected" || stageKey === "draft") return undefined;
 
   const want = STAGE_EXPECTED_ROLE[stageKey];
-  const hits = timeline.filter((t) => t.stage === stageKey);
+  const safeTimeline = Array.isArray(timeline) ? timeline : [];
+  const hits = safeTimeline.filter((t) => t.stage === stageKey);
   for (let i = hits.length - 1; i >= 0; i--) {
     const e = hits[i]!;
     if (!want || e.role === want) return e;

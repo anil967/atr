@@ -17,9 +17,10 @@ export function ApprovalTimeline({
   timeline,
   currentStatus,
 }: {
-  timeline: AtrTimelineEntry[];
+  timeline?: AtrTimelineEntry[] | null;
   currentStatus: AtrStatus;
 }) {
+  const safeTimeline = Array.isArray(timeline) ? timeline : [];
   const curIdx =
     currentStatus === "rejected"
       ? -999
@@ -54,7 +55,7 @@ export function ApprovalTimeline({
             currentStatus !== "rejected" &&
             currentStatus !== "draft" &&
             stage.key === currentStatus;
-          const entry = entryForDisplayedStage(timeline, stage.key);
+          const entry = entryForDisplayedStage(safeTimeline, stage.key);
 
           return (
             <div key={stage.key} className={`relative pl-8 ${reached ? "" : "opacity-40"}`}>
