@@ -294,17 +294,31 @@ export async function reviewReport(
   const user = getCurrentUser();
   if (!user) throw new Error("Unauthorized");
 
-  const result = await reviewAtrFn({
-    data: {
-      atrId,
-      user,
-      action,
-      remark,
-      ...(coordinatorValidation ? { coordinatorValidation } : {}),
-      ...(hodValidation ? { hodValidation } : {}),
-      ...(chiefMentorValidation ? { chiefMentorValidation } : {}),
-    },
-  });
+  const requestData = {
+    atrId,
+    user,
+    action,
+    remark,
+    ...(coordinatorValidation ? { coordinatorValidation } : {}),
+    ...(hodValidation ? { hodValidation } : {}),
+    ...(chiefMentorValidation ? { chiefMentorValidation } : {}),
+  };
+
+  let result: Awaited<ReturnType<typeof reviewAtrFn>>;
+  try {
+    result = await reviewAtrFn({ data: requestData });
+  } catch (err) {
+    // Some ATRs can exist only in local cache briefly (or from older local-only sessions).
+    // If server row is missing, force an upsert from local cache and retry once.
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    if (!/ATR not found/i.test(message)) throw err;
+
+    const local = read().find((r) => r.id === atrId);
+    if (!local) throw err;
+
+    await saveAtrFn({ data: local });
+    result = await reviewAtrFn({ data: requestData });
+  }
 
   const items = read();
   const next = items.map((r) => {

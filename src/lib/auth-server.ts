@@ -624,7 +624,21 @@ export const reviewAtrFn = createServerFn({ method: "POST" })
       };
     }
 
-    // 2. Approve / reject (non-terminal IQAC paths)
+    // 2. Role/stage guardrails so users can only act on their own queue stage.
+    if (action === "approve" || action === "reject") {
+      const canReview =
+        (user.role === "coordinator" &&
+          (currentStatus === "submitted" || currentStatus === "coordinator_review")) ||
+        (user.role === "hod" && currentStatus === "hod_review") ||
+        (user.role === "chief_mentor" && currentStatus === "chief_mentor_review") ||
+        (user.role === "admin" &&
+          (currentStatus === "iqac_review" || currentStatus === "iqac_pending_scan"));
+      if (!canReview) {
+        throw new Error(`You cannot ${action} this ATR at "${currentStatus}" stage.`);
+      }
+    }
+
+    // 3. Approve / reject (non-terminal IQAC paths)
     let nextStatus: AtrStatus = report.status;
 
     if (action === "approve") {
@@ -639,7 +653,7 @@ export const reviewAtrFn = createServerFn({ method: "POST" })
       nextStatus = "rejected";
     }
 
-    // 3. Update timeline — store the *completed* step (closing actor matches column), not inbox destination.
+    // 4. Update timeline — store the *completed* step (closing actor matches column), not inbox destination.
     const timelineStage: AtrTimelineEntry["stage"] = completedStageFromApproval(
       action,
       user.role,
@@ -701,7 +715,7 @@ export const reviewAtrFn = createServerFn({ method: "POST" })
       ...(chiefMentorValidationNext !== undefined ? { chiefMentorValidation: chiefMentorValidationNext } : {}),
     };
 
-    // 4. Save
+    // 5. Save
     const { error: saveError } = await sb
       .from("atrs")
       .update({

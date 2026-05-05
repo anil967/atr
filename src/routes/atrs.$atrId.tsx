@@ -610,7 +610,8 @@ function AtrDetailPage() {
       }
       setRemark("");
     } catch (err) {
-      toast.error("Action failed. Please try again.");
+      const msg = err instanceof Error ? err.message : "Action failed. Please try again.";
+      toast.error(msg, { duration: 10_000 });
     } finally {
       setLoading(false);
     }
