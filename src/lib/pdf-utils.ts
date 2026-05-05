@@ -394,13 +394,13 @@ export async function generateAtrPdf(
     renderTitleBand("Mentor-Mentees Report");
   } else if (chiefPdf) {
     renderTitleBand(
-      "CHIEF MENTOR REVIEW REPORT",
+      "CHIEF PROCTOR REVIEW REPORT",
       "Level 3 institutional endorsement — forwarded to IQAC audit",
     );
   } else if (hodForFront) {
     renderTitleBand(
       "HOD DEPARTMENTAL REVIEW REPORT",
-      "Level 2 departmental review — forwarded toward Chief Mentor / institutional chain",
+      "Level 2 departmental review — forwarded toward Chief Proctor / institutional chain",
     );
   } else if (coordForFront) {
     renderTitleBand(
@@ -456,7 +456,7 @@ export async function generateAtrPdf(
     sectionDivider(doc, y + 9, ML - 2, MR + 2, 0.2);
 
     if (standaloneChiefMentorValidationPdf && chiefPdf) {
-      metaCol(doc, "CHIEF MENTOR",   chiefPdf.chiefMentorName, ML, y);
+      metaCol(doc, "CHIEF PROCTOR",   chiefPdf.chiefMentorName, ML, y);
       metaCol(
         doc, "SESSION / ATR NO",
         sessionAtrText,
@@ -769,7 +769,7 @@ export async function generateAtrPdf(
     y += 4;
   };
 
-  // ── 5e. Chief Mentor validation block ─────────────────────────────────────
+  // ── 5e. Chief Proctor validation block ─────────────────────────────────────
   const appendChiefMentorAuditFront = (): void => {
     if (!chiefPdf) return;
 
@@ -792,7 +792,7 @@ export async function generateAtrPdf(
     sectionDivider(doc, y - 4,  ML - 2, MR + 2, 0.15);
     sectionDivider(doc, y + 10, ML - 2, MR + 2, 0.15);
 
-    metaCol(doc, "CHIEF MENTOR NAME", chiefPdf.chiefMentorName, ML, y);
+    metaCol(doc, "CHIEF PROCTOR NAME", chiefPdf.chiefMentorName, ML, y);
     y += 16;
 
     const chiefCh = normalizeChiefMentorValidationChecklist(chiefPdf.checklist);
@@ -808,7 +808,7 @@ export async function generateAtrPdf(
       doc.setFontSize(8);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(...C.muted);
-      doc.text("CHIEF MENTOR REMARKS / FEEDBACK", ML, y);
+      doc.text("CHIEF PROCTOR REMARKS / FEEDBACK", ML, y);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(...C.dark);
       const remarksSplit = doc.splitTextToSize(chiefPdf.reviewRemarks.trim(), MR - ML);
@@ -822,7 +822,7 @@ export async function generateAtrPdf(
     if (y > pageHeight - 40) { doc.addPage(); y = 25; }
     else { y += 12; }
 
-    y = signatureBlock(doc, ML, y, "Chief Mentor (Signature)", chiefPdf.chiefMentorName, validatedDisplay);
+    y = signatureBlock(doc, ML, y, "Chief Proctor (Signature)", chiefPdf.chiefMentorName, validatedDisplay);
     y += 4;
   };
 
@@ -924,7 +924,7 @@ export async function generateAtrPdf(
     const footerLabel = iqacMergedChain
       ? `IQAC merged institutional package (mentor–chief mentor chain) — ${format(new Date(), "PPP p")} | Confidential`
       : chiefMentorAudit
-      ? `Chief Mentor review snapshot — ${format(new Date(), "PPP p")} | Institutional Record - Confidential`
+      ? `Chief Proctor review snapshot — ${format(new Date(), "PPP p")} | Institutional Record - Confidential`
       : hodAudit
       ? `HOD departmental review snapshot — ${format(new Date(), "PPP p")} | Institutional Record - Confidential`
       : coordinatorAudit
@@ -961,15 +961,15 @@ export async function generateAtrPdf(
 // Convenience exports  (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** True when coordinator, HOD, and Chief Mentor snapshots exist (required for IQAC merged download). */
+/** True when coordinator, HOD, and Chief Proctor snapshots exist (required for IQAC merged download). */
 export function iqacMergedChainSnapshotsReady(report: AtrReport): boolean {
   return !!(report.coordinatorValidation && report.hodValidation && report.chiefMentorValidation);
 }
 
-/** Full-chain PDF from mentor annex through Chief Mentor validations — for IQAC print/sign/scan workflow. */
+/** Full-chain PDF from mentor annex through Chief Proctor validations — for IQAC print/sign/scan workflow. */
 export async function generateIqacMergedValidationPdf(report: AtrReport): Promise<void> {
   if (!iqacMergedChainSnapshotsReady(report)) {
-    throw new Error("Missing coordinator, HOD, or Chief Mentor validation snapshots for this ATR.");
+    throw new Error("Missing coordinator, HOD, or Chief Proctor validation snapshots for this ATR.");
   }
   await generateAtrPdf(
     report,

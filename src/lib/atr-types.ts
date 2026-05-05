@@ -4,7 +4,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   mentor: "Mentor",
   coordinator: "Coordinator",
   hod: "HOD",
-  chief_mentor: "Chief Mentor",
+  chief_mentor: "Chief Proctor",
   admin: "Admin",
 };
 
@@ -34,7 +34,7 @@ export const STATUS_LABELS: Record<AtrStatus, string> = {
   submitted: "Submitted",
   coordinator_review: "Coordinator Review",
   hod_review: "HOD Review",
-  chief_mentor_review: "Chief Mentor Review",
+  chief_mentor_review: "Chief Proctor Review",
   iqac_review: "IQAC Audit",
   iqac_pending_scan: "IQAC — signed scan pending",
   approved: "Approved",

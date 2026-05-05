@@ -36,7 +36,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Multi-level Action Taken Report workflow for BCET. Mentor, Coordinator, HOD, Chief Mentor and Admin collaboration with Excel student parsing.",
+          "Multi-level Action Taken Report workflow for BCET. Mentor, Coordinator, HOD, Chief Proctor and Admin collaboration with Excel student parsing.",
       },
       { name: "author", content: "BCET" },
       { property: "og:title", content: "BCET ATR — Action Taken Report Management" },

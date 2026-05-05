@@ -52,7 +52,7 @@ function HodPage() {
             Department review board
           </h1>
           <p className="text-muted-foreground mt-2">
-            Review coordinator-cleared ATRs before they move to chief mentor.
+            Review coordinator-cleared ATRs before they move to chief proctor.
           </p>
         </header>
 

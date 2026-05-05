@@ -7,7 +7,7 @@ const STAGES: { key: AtrStatus; label: string }[] = [
   { key: "submitted", label: "Submission" },
   { key: "coordinator_review", label: "Coordinator" },
   { key: "hod_review", label: "HOD" },
-  { key: "chief_mentor_review", label: "Chief Mentor" },
+  { key: "chief_mentor_review", label: "Chief Proctor" },
   { key: "iqac_review", label: "IQAC Audit" },
   { key: "iqac_pending_scan", label: "Signed scan filing" },
   { key: "approved", label: "Approved" },
@@ -32,7 +32,7 @@ export function ApprovalTimeline({
     <div className="bg-growth text-growth-foreground rounded-3xl p-8 shadow-architectural relative overflow-hidden">
       <h3 className="text-lg font-medium mb-1">Validation Sequence</h3>
       <p className="text-xs text-growth-foreground/60 mb-8">
-        Mentor submission through coordinator, HOD, and chief mentor; IQAC merges the institutional package,
+        Mentor submission through coordinator, HOD, and chief proctor; IQAC merges the institutional package,
         obtains signatures and stamp, uploads the scanned file, then the record is approved.
       </p>
 

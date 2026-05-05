@@ -101,7 +101,7 @@ function ChiefMentorPage() {
               Institutional <span className="italic font-display text-foreground">Sign-off</span>
             </h1>
             <p className="text-muted-foreground max-w-2xl text-sm md:text-base leading-relaxed">
-              Global oversight for Bhadrak Institute of Engineering & Technology. 
+              Global oversight for Balasore College of Engineering and Technology. 
               Manage mentor-coordinator relationships and perform final quality audits on ATR outcomes.
             </p>
             <div className="pt-4">

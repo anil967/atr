@@ -52,7 +52,7 @@ function DashboardPage() {
             </h1>
             <p className="text-muted-foreground mt-2 text-pretty max-w-prose">
               Welcome back. Track your action taken reports through every level of review —
-              from coordinator to chief mentor.
+              from coordinator to chief proctor.
             </p>
           </div>
           <Link
@@ -159,7 +159,7 @@ function DashboardPage() {
                 <h3 className="text-lg font-medium">No active reviews</h3>
                 <p className="text-sm text-growth-foreground/70 mt-2">
                   When you submit an ATR, you'll see its progress through coordinator, HOD and
-                  chief mentor reviews here.
+                  chief proctor reviews here.
                 </p>
               </div>
             )}

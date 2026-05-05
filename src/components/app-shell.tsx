@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       : []),
     ...NAV.slice(1)
       .map(item => {
-        // For Chief Mentor, rename "My ATRs" to "ATRs"
+        // For Chief Proctor, rename "My ATRs" to "ATRs"
         if (user.role === "chief_mentor" && item.to === "/atrs") {
           return { ...item, label: "ATRs" };
         }

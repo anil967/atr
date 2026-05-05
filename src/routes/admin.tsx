@@ -58,7 +58,7 @@ function AdminPage() {
             Institutional Audit & Oversight
           </h1>
           <p className="text-muted-foreground mt-2">
-            Final institutional quality audit for Bhadrak Institute of Engineering & Technology.
+            Final institutional quality audit for Balasore College of Engineering and Technology.
           </p>
         </header>
 

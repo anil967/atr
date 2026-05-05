@@ -267,7 +267,7 @@ function AtrDetailPage() {
     allDataVerified: null,
   });
 
-  /** Chief Mentor — same: all three lines answered then Approve (any mix of Agree/Disagree). */
+  /** Chief Proctor — same: all three lines answered then Approve (any mix of Agree/Disagree). */
   const [chiefChecklist, setChiefChecklist] = useState<Record<ChiefChecklistKey, HodLineDecision | null>>({
     disciplineIssuesHandledWell: null,
     coordinationWithMentorsContinued: null,
@@ -504,9 +504,9 @@ function AtrDetailPage() {
       if (user?.role === "chief_mentor") {
         const cmAudit = report.chiefMentorValidation ?? chiefMentorValidationPayload;
         if (!cmAudit) {
-          toast.error("Chief Mentor review PDF not available.", {
+          toast.error("Chief Proctor review PDF not available.", {
             description:
-              "Complete the Chief Mentor checklist below while this ATR is with you, or reopen after approval if the snapshot synced.",
+              "Complete the Chief Proctor checklist below while this ATR is with you, or reopen after approval if the snapshot synced.",
           });
           return;
         }
@@ -520,7 +520,7 @@ function AtrDetailPage() {
         if (!iqacMergedChainSnapshotsReady(report)) {
           toast.error("Merged IQAC package is not ready.", {
             description:
-              "This ATR needs coordinator, HOD, and Chief Mentor validation snapshots before the institutional merge can run.",
+              "This ATR needs coordinator, HOD, and Chief Proctor validation snapshots before the institutional merge can run.",
           });
           return;
         }
@@ -543,7 +543,7 @@ function AtrDetailPage() {
       toast.info("Use the IQAC panel.", {
         description:
           report.status === "iqac_review"
-            ? "Approve and download the merged Mentor–Chief Mentor package from the IQAC section above."
+            ? "Approve and download the merged Mentor–Chief Proctor package from the IQAC section above."
             : "Upload the scanned countersigned file and submit final approval there.",
       });
       return;
@@ -567,7 +567,7 @@ function AtrDetailPage() {
     if (action === "approve" && isChiefMentorReviewer && !chiefMentorChecksComplete) {
       toast.error("Confirmation required before approval.", {
         description:
-          "For each of the three Chief Mentor lines, choose Agree (tick) or Disagree (cross), then approve.",
+          "For each of the three Chief Proctor lines, choose Agree (tick) or Disagree (cross), then approve.",
         duration: 10_000,
       });
       return;
@@ -620,7 +620,7 @@ function AtrDetailPage() {
         try {
           await generateAtrPdf(snapshot, null, hodForPdf);
           toast.success("Approved & forwarded.", {
-            description: `Forwarded to Chief Mentor. HOD review PDF (${snapshot.id}_HOD_Dept_Review.pdf).`,
+            description: `Forwarded to Chief Proctor. HOD review PDF (${snapshot.id}_HOD_Dept_Review.pdf).`,
             duration: 9000,
           });
         } catch (pdfErr) {
@@ -641,12 +641,12 @@ function AtrDetailPage() {
         try {
           await generateAtrPdf(snapshot, null, null, chiefForPdf);
           toast.success("Approved & forwarded.", {
-            description: `Forwarded to IQAC. Chief Mentor review PDF (${snapshot.id}_ChiefMentor_Validation.pdf).`,
+            description: `Forwarded to IQAC. Chief Proctor review PDF (${snapshot.id}_ChiefProctor_Validation.pdf).`,
             duration: 9000,
           });
         } catch (pdfErr) {
           console.error(pdfErr);
-          toast.warning("Approved, but Chief Mentor PDF export failed.", {
+          toast.warning("Approved, but Chief Proctor PDF export failed.", {
             description: "Try Download PDF from this page after refresh.",
           });
         }
@@ -718,7 +718,7 @@ function AtrDetailPage() {
     if (!iqacMergedChainSnapshotsReady(report)) {
       toast.error("Cannot issue the IQAC merged package.", {
         description:
-          "Coordinator, HOD, and Chief Mentor validation snapshots must all be stored on this ATR.",
+          "Coordinator, HOD, and Chief Proctor validation snapshots must all be stored on this ATR.",
         duration: 10_000,
       });
       return;
@@ -902,7 +902,7 @@ function AtrDetailPage() {
                   {isIqacAwaitingMergedApprove ? (
                     <>
                       Approve to move this ATR to the filing step and automatically download the merged PDF (mentor
-                      submission through Chief Mentor). After printing, signing, and stamping, scan the document and
+                      submission through Chief Proctor). After printing, signing, and stamping, scan the document and
                       complete the cycle with Submit final approval.
                     </>
                   ) : (
@@ -1564,7 +1564,7 @@ function AtrDetailPage() {
                       : isHodReviewer && !hodChecksComplete
                         ? "Answer all three HOD lines (Agree or Disagree) before approving."
                         : isChiefMentorReviewer && !chiefMentorChecksComplete
-                          ? "Answer all three Chief Mentor lines (Agree or Disagree) before approving."
+                          ? "Answer all three Chief Proctor lines (Agree or Disagree) before approving."
                           : undefined
                   }
                   className="px-8 py-3 rounded-2xl text-sm font-bold bg-growth text-growth-foreground hover:scale-105 active:scale-95 transition-all shadow-lg shadow-growth/20 flex items-center gap-2 disabled:opacity-40"
@@ -1704,10 +1704,10 @@ function AtrDetailPage() {
             {isChiefMentorReviewer ? (
               <fieldset className="mt-6 rounded-2xl border border-growth/20 bg-secondary/15 p-5 space-y-4">
                 <legend className="text-[11px] font-bold uppercase tracking-widest text-growth px-2">
-                  Chief Mentor confirmation
+                  Chief Proctor confirmation
                 </legend>
                 <p className="text-xs text-muted-foreground -mt-1 mb-3">
-                  For each line choose Agree (tick) or Disagree (cross). Your choices appear on the Chief Mentor PDF.
+                  For each line choose Agree (tick) or Disagree (cross). Your choices appear on the Chief Proctor PDF.
                   Approve when all three are answered — crosses do not block forward.
                 </p>
                 <div className="space-y-3">

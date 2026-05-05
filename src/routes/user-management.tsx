@@ -203,7 +203,7 @@ function UserManagementPage() {
                         <option value="mentor">Mentor</option>
                         <option value="coordinator">Coordinator</option>
                         <option value="hod">HOD</option>
-                        <option value="chief_mentor">Chief Mentor</option>
+                        <option value="chief_mentor">Chief Proctor</option>
                         <option value="admin">Admin</option>
                       </select>
                     </div>
@@ -239,7 +239,7 @@ function UserManagementPage() {
                 { id: "mentor", label: "Mentors" },
                 { id: "coordinator", label: "Coordinators" },
                 { id: "hod", label: "HODs" },
-                { id: "chief_mentor", label: "Chief Mentors" },
+                { id: "chief_mentor", label: "Chief Proctors" },
                 { id: "admin", label: "Admins" },
               ].map((r) => (
                 <button
